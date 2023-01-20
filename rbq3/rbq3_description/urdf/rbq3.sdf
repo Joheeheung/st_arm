@@ -960,7 +960,7 @@
           <cameraInfoTopicName>camera_info</cameraInfoTopicName>
           <frameName>camera_link</frameName>
         </plugin>
-        <visualize>false</visualize>
+        <visualize>true</visualize>
       </sensor>
 
       <!--
@@ -1320,11 +1320,11 @@
         </inertia>
       </inertial>
       <visual name='wrist_yaw_link_visual'>
-        <pose>0 -0.071 -0.0205 0 -0 0</pose>
+        <pose>0 0 0 0 -0 0</pose>
         <geometry>
           <mesh>
             <scale>1 1 1</scale>
-            <uri>model://st_arm_description/meshes/stl/wrist_yaw_link_v2.STL</uri>
+            <uri>model://st_arm_description/meshes/stl/wrist_yaw_link.STL</uri>
           </mesh>
         </geometry>
         <material>
@@ -1360,7 +1360,7 @@
           <cameraInfoTopicName>camera_info</cameraInfoTopicName>
           <frameName>camera_link</frameName>
         </plugin>
-        <visualize>false</visualize>
+        <visualize>true</visualize>
       </sensor>
 
       <!--
@@ -1487,10 +1487,10 @@
       
       <!---->
       <collision name='gripper_left_link_collision'>
-        <pose>0.0425 0.0 0 0 0 0</pose>
+        <pose>0.0425 0.015 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.085 0.005 0.02</size>
+            <size>0.085 0.03 0.02</size>
           </box>
         </geometry>
         
@@ -1575,10 +1575,10 @@
       
       <!---->
       <collision name='gripper_right_link_collision'>
-        <pose>0.0425 -0.0 0 0 0 0</pose>
+        <pose>0.0425 -0.015 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.085 0.005 0.02</size>
+            <size>0.085 0.03 0.02</size>
           </box>
         </geometry>
         

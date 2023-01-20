@@ -130,7 +130,7 @@
           </mesh>
         </geometry>
         <material>
-          <ambient>0.0 0.0 0.0 1</ambient>
+          <ambient>1.0 0.0 0.0 1</ambient>
         </material>
       </visual>
     </link>

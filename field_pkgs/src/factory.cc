@@ -12,14 +12,11 @@ namespace gazebo
         {
             // Option 1: Insert model from file via function call.
             // The filename must be in the GAZEBO_MODEL_PATH environment variable.
-            // _parent->InsertModelFile("model://test_bench");
             _parent->InsertModelFile("model://box");
             //_parent->InsertModelFile("model://Desk");
 
             // Option 2: Insert model from string via function call.
             // Insert a sphere model from string
-
-            /*
             sdf::SDF sphereSDF;
             sphereSDF.SetFromString(
                 "<sdf version ='1.4'>\
@@ -27,11 +24,6 @@ namespace gazebo
                     <pose>2 3 0 0 0 0</pose>\
                     <link name ='link'>\
                       <pose>0 0 .5 0 0 0</pose>\
-                      <collision name ='collision'>\
-                        <geometry>\
-                          <sphere><radius>0.5</radius></sphere>\
-                        </geometry>\
-                      </collision>\
                       <visual name ='visual'>\
                         <geometry>\
                           <sphere><radius>0.5</radius></sphere>\
@@ -44,7 +36,6 @@ namespace gazebo
             sdf::ElementPtr model = sphereSDF.Root()->GetElement("model");
             model->GetAttribute("name")->SetFromString("unique_sphere");
             _parent->InsertModelSDF(sphereSDF);
-            */
 
             std::cout<<"Load field_pkgs Factory Plugin..."<<std::endl;
         }

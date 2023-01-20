@@ -25,9 +25,6 @@ int main(int argc, char *argv[])
     ros::Publisher st_arm_joint_states_pub_;
     st_arm_joint_states_pub_ = node_handle_.advertise<sensor_msgs::JointState>("st_arm/joint_states", 100);
 
-    ros::Publisher st_arm_object_weight_pub_;
-    st_arm_object_weight_pub_ = node_handle_.advertise<std_msgs::Float32MultiArray>("st_arm/estimated_obj_weight", 100);
-
     ros::Subscriber switch_mode_sub_;
     switch_mode_sub_ = node_handle_.subscribe("st_arm/switch_mode", 10, &Callback::SwitchMode, &callback);
 
@@ -54,9 +51,6 @@ int main(int argc, char *argv[])
 
     ros::Subscriber virtual_box_pose_sub_;
     virtual_box_pose_sub_ = node_handle_.subscribe("unity/virtual_box_pose", 10, &Callback::HMDTFCallback, &callback);
-
-    ros::Subscriber weight_est_start_sub_;
-    weight_est_start_sub_ = node_handle_.subscribe("unity/calibrate_obj_weight", 10, &Dynamics::JMDynamics::SwitchOnAddingEstimatedObjWeightToRBDL, &jm_dynamics);
 
     spi2can::getInstance();
 
@@ -86,17 +80,12 @@ int main(int argc, char *argv[])
         for (uint8_t i = 0; i<3; i ++)
         {
             msg.effort.push_back(_DEV_MC[i].GetTorque());
-            msg.position.push_back(jm_dynamics.ref_th[i]);
+            // msg.position.push_back(jm_dynamics.ref_th[i]);
             // msg.velocity.push_back(jm_dynamics.th_dot[i]);
             // msg.velocity.push_back(jm_dynamics.th_dot_estimated[i]);
         }
         st_arm_joint_states_pub_.publish(msg);
-
-        std_msgs::Float32MultiArray object_weight_msg;
-        object_weight_msg.data.push_back(jm_dynamics.pose_difference(2));
-        object_weight_msg.data.push_back(jm_dynamics.estimated_object_weight);
-        st_arm_object_weight_pub_.publish(object_weight_msg);
-
+        
         ros::spinOnce();
         loop_rate.sleep();
     }
@@ -130,6 +119,13 @@ void *rt_motion_thread(void *arg){
         else if(loop_count > 1000){
             loop_count++;
             jm_dynamics.Loop();
+            // jm_dynamics.SetTheta(motor_ctrl.GetJointTheta());
+            // jm_dynamics.SetThetaDotSMAF(motor_ctrl.GetThetaDotSMAF());
+            // jm_dynamics.GenerateTorqueManipulationMode();
+            // jm_dynamics.GenerateTorqueVisionMode();
+            // jm_dynamics.GenerateGripperTorque();
+            // motor_ctrl.SetTorque(jm_dynamics.GetTorque());
+            // motor_ctrl.EnableFilter();
 
             if(comm_loop_count > 500 && is_print_comm_frequency) {
                 comm_loop_count = 1;

@@ -1,20 +1,30 @@
 #include "dynamixel.h"
 #define PI                3.141592
 
-Dynamixel::Dynamixel(){
+Dynamixel::Dynamixel(){ //생성자
   uint8_t dxl_error = 0;
   int dxl_comm_result = COMM_TX_FAIL;
 
-  portHandler = dynamixel::PortHandler::getPortHandler(DEVICE_NAME);
-  packetHandler = dynamixel::PacketHandler::getPacketHandler(PROTOCOL_VERSION);
+  portHandler = dynamixel::PortHandler::getPortHandler(DEVICE_NAME); //장치 이름(DEVICE_NAME)을 받아 포트를 설정
+  packetHandler = dynamixel::PacketHandler::getPacketHandler(PROTOCOL_VERSION); //패킷 받을 수 있도록 프로토콜 버전 기록 - 현재는 "2" RS485
   
-  if (!portHandler->openPort()) ROS_ERROR("Failed to open the port!");
-  if (!portHandler->setBaudRate(BAUDRATE)) ROS_ERROR("Failed to set the baudrate!");
+  if (!portHandler->openPort()) ROS_ERROR("Failed to open the port!"); // 포트가 안 잡히면 포트 못 잡았다고 터미널 메세지 출력
+  if (!portHandler->setBaudRate(BAUDRATE)) ROS_ERROR("Failed to set the baudrate!"); // 보드레이트가 안 잡히면 못 잡았다고 메세지 출력
   
-  for(uint8_t i=0; i<4; i++)
+  for(uint8_t i=0; i<4; i++) // 다이나믹셀 4개의 모터에 대해 통신 확인이 필요
   {
     dxl_comm_result = packetHandler->write1ByteTxRx(portHandler, dx_id[i], kRegStandard_OperatingMode, 0, &dxl_error);   // current_mode
-    if (dxl_comm_result != COMM_SUCCESS) ROS_ERROR("Failed to set torque control mode for Dynamixel ID %d", i);
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // write1ByteTxRx  (PortHandler *port, uint8_t id, uint16_t address, uint8_t data, uint8_t *error = 0) = 0
+    // uint16_t address : 입력해준 주소로
+    // uint8_t data : 데이터에 맞게 값을 입력하면
+    // 0을 반환 -> COMM_SUCCESS = 0
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // kRegStandard_OperatingMode : 제어모드
+    // 0 : 토크제어모드
+    
+    if (dxl_comm_result != COMM_SUCCESS) ROS_ERROR("Failed to set torque control mode for Dynamixel ID %d", i); // tx, rx 연결 실패 시
   }
 
   // for(uint8_t i=0;i<4;i++) packetHandler->write1ByteTxRx(portHandler, dx_id[i], kRegStandard_OperatingMode, 3, &dxl_error);   // position_mode
@@ -28,12 +38,13 @@ Dynamixel::Dynamixel(){
   for(uint8_t i=0; i<4; i++)
   {
     dxl_comm_result = packetHandler->write1ByteTxRx(portHandler, dx_id[i], kRegStandard_LED, 1, &dxl_error);
+    // kRegStandard_LED : LED ON
     if (dxl_comm_result != COMM_SUCCESS) ROS_ERROR("Failed to enable LED for Dynamixel ID %d", i);
   } 
 }
 
 
-Dynamixel::~Dynamixel(){
+Dynamixel::~Dynamixel(){ // 
   uint8_t dxl_error = 0;
   int dxl_comm_result = COMM_TX_FAIL;
 

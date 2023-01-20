@@ -16,25 +16,10 @@ find_package (Eigen3 REQUIRED)
 find_package (RBDL REQUIRED)
 
 link_directories(${GAZEBO_LIBRARY_DIRS})
-include_directories(${Boost_INCLUDE_DIR} ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS} ${PCL_LIBRARY_DIRS} ${EIGEN3_INCLUDE_DIR} ${RBDL_INCLUDE_DIR})
+include_directories(include ${Boost_INCLUDE_DIR} ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS} ${PCL_LIBRARY_DIRS} ${EIGEN3_INCLUDE_DIR} ${RBDL_INCLUDE_DIR})
 
-add_library(st_arm_plugin src/st_arm_plugin.cc 
-                          # src/rbdl/Constraints.cc 
-                          # src/rbdl/Dynamics.cc 
-                          # src/rbdl/Joint.cc 
-                          # src/rbdl/Kinematics.cc 
-                          # src/rbdl/Logging.cc 
-                          # src/rbdl/Model.cc 
-                          # src/rbdl/rbdl_mathutils.cc 
-                          # src/rbdl/rbdl_utils.cc 
-                          # src/rbdl/rbdl_version.cc
-                          )
-target_link_libraries(st_arm_plugin ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES} ${RBDL_LIBRARY}) # ${EIGEN3_INCLUDE_DIR} ${RBDL_LIBRARIES}
-
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-)
+add_library(st_arm_plugin src/st_arm_plugin.cc )
+target_link_libraries(st_arm_plugin ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES} ${RBDL_LIBRARY})
 
 catkin_package(
  INCLUDE_DIRS include

@@ -4,17 +4,27 @@ namespace gazebo
 {
   void STArmPlugin::Load(ModelPtr _model, sdf::ElementPtr/*, sensors::SensorPtr _parent*/)
   {
-    this->model = _model;
-    GetLinks();
-    GetJoints();
-    GetSensors();
+    this->model = _model; //여기서 this는 객체의 주소를 가리킨다. 이 model 객체(class)의 주소값을 가리킨다.
+    GetLinks(); //각 링크들의 정보를 얻어낸다.
+    GetJoints(); // 각 joint들의 정보를 얻어낸다.
+    GetSensors(); // 센서들의 정보를 얻어낸다.
     InitROSPubSetting();
-    std::cout << "Before Calling RBDL Initialize function" << std::endl;
+    std::cout << "Before Calling RBDL Initialize function" << std::endl; //앞의 코드가 문제가 있을 시 나오지않는 출력
+
     // InitializeRBDLVariables();
     InitializeRBDLVariablesWithObj(0);
-    this->last_update_time = this->model->GetWorld()->SimTime();
-    this->update_connection = event::Events::ConnectWorldUpdateBegin(boost::bind(&STArmPlugin::Loop, this));
+    this->last_update_time = this->model->GetWorld()->SimTime(); // 가제보월드에서 가제보만의 시간을 불러온다. 
+    //가제보시간은 컴퓨터의 처리능력에 따라 느려지거나 할 수 있다. 그래서 현실시간(컴퓨터의 시간)이 아닌 가제보시간에서 로봇이 움직여야 제대로된 작동을 하게된다.
+
+    this->update_connection = event::Events::ConnectWorldUpdateBegin(boost::bind(&STArmPlugin::Loop, this)); // 계속해서 Loop하는 스레드를 만든다.
     
+    //event::Events::ConnectWorldUpdateBegin
+    //이 함수의 경우, 우리의 Plugin's Update method(이 코드의 경우, STArmPlugin::Loop이다)를 가제보 시뮬레이터의 Events 클래스 인스턴스에 대한 콜백 기능으로써 사용하게된다.
+    //그래서 가제보가 우리의 Plugin's method를 시뮬레이션의 매 time step마다 부를 수 있도록 허용해준다.
+    // 
+    //boost::bind
+    //특정 함수를 호출할 때, 그 매개변수 값을 함께 넘겨주기 위해 bind를 사용한다.
+
     is_move_rbq3 = true;
     if(is_move_rbq3)
     {
@@ -25,7 +35,7 @@ namespace gazebo
   }
 
 
-  void STArmPlugin::GetLinks()
+  void STArmPlugin::GetLinks() //모델(digital twin)의 각 링크들마다, 자신들이 어떤 정보를 가진 링크들인지 입력하는 함수, updated : 2023-01-20 쓰고 있지 않는 함수
   {
     this->Base  = this->model->GetLink("base_link");
     this->Link1 = this->model->GetLink("shoulder_yaw_link");
@@ -39,7 +49,7 @@ namespace gazebo
   }
 
 
-  void STArmPlugin::GetJoints()
+  void STArmPlugin::GetJoints() //모델(digital twin)의 각 joint들마다, 자신들이 어떤 정보를 가진 joint들인지 입력하는 함수
   {
     this->Joint1 = this->model->GetJoint("shoulder_yaw_joint");
     this->Joint2 = this->model->GetJoint("shoulder_pitch_joint");
@@ -52,7 +62,7 @@ namespace gazebo
   }
 
 
-  void STArmPlugin::GetSensors()
+  void STArmPlugin::GetSensors() //모델(digital twin)의 센서, 자신들이 어떤 정보를 가진 joint들인지 입력하는 함수
   {
     this->Sensor = sensors::get_sensor("rbq3_base_imu");
     this->RBQ3BaseImu = std::dynamic_pointer_cast<sensors::ImuSensor>(Sensor);
@@ -252,9 +262,9 @@ namespace gazebo
 
   void STArmPlugin::Loop()
   {
-    current_time = this->model->GetWorld()->SimTime();
-    dt = current_time.Double() - last_update_time.Double();
-    last_update_time = current_time;
+    current_time = this->model->GetWorld()->SimTime(); //현재시간
+    dt = current_time.Double() - last_update_time.Double(); //현재시간 - 과거시간
+    last_update_time = current_time; // dt처리 후 현재시간을 과거시간으로 치환
     
     GetJointPosition();
     GetJointVelocity();
@@ -303,7 +313,7 @@ namespace gazebo
     
     for(uint8_t i=0; i<NUM_OF_JOINTS_WITH_TOOL; i++)
     {
-      if(dt > 0.0005) th_dot[i] = (th[i] - last_th[i]) / dt;
+      if(dt > 0.0005) th_dot[i] = (th[i] - last_th[i]) / dt; // 왜 0.005초?
       last_th[i] = th[i];
     }
 
@@ -435,16 +445,16 @@ namespace gazebo
   }
 
 
-  void STArmPlugin::SetJointTorque()
+  void STArmPlugin::SetJointTorque() //각 조인트에 계산된 토크를 넣어준다. N/m, Loop중 마지막 실행함수
   {
-    this->Joint1->SetForce(2, joint_torque(0)); 
-    this->Joint2->SetForce(1, joint_torque(1)); 
-    this->Joint3->SetForce(1, joint_torque(2));
-    this->Joint4->SetForce(1, joint_torque(3));
-    this->Joint5->SetForce(0, joint_torque(4)); 
-    this->Joint6->SetForce(2, joint_torque(5));
-    this->JointGripperL->SetForce(1, joint_torque(6));
-    this->JointGripperR->SetForce(1, joint_torque(7));
+    this->Joint1->SetForce(2, joint_torque(0)); // z축, yaw
+    this->Joint2->SetForce(1, joint_torque(1)); // y축, pitch
+    this->Joint3->SetForce(1, joint_torque(2)); // y축, pitch
+    this->Joint4->SetForce(1, joint_torque(3)); // y축, pitch
+    this->Joint5->SetForce(0, joint_torque(4)); // x축, roll
+    this->Joint6->SetForce(2, joint_torque(5)); // z축, yaw
+    this->JointGripperL->SetForce(1, joint_torque(6)); // y축, prismatic
+    this->JointGripperR->SetForce(1, joint_torque(7)); // y축, prismatic
   }
 
 
@@ -773,6 +783,7 @@ namespace gazebo
     SetRBDLVariables();
 
     RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL);
+    // RBDL::InverseDynamics(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.q_d_dot, arm_rbdl.tau, NULL);
     for(uint8_t i = 0; i < 6; i++)
     {
       tau_gravity_compensation(i) = arm_rbdl.tau(i);

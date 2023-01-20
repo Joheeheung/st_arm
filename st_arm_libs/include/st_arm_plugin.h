@@ -29,7 +29,7 @@
 #include <std_msgs/Float32.h>
 #include <rbdl/rbdl.h>
 
-
+// namespace들을 알려준다.
 using gazebo::physics::ModelPtr;
 using gazebo::physics::LinkPtr;
 using gazebo::sensors::ImuSensorPtr;
@@ -60,14 +60,14 @@ namespace RBDLMath = RigidBodyDynamics::Math;
 
 using RBDLModel = RBDL::Model;
 using RBDLBody = RBDL::Body;
-using RBDLVector3d = RBDL::Math::Vector3d;
+using RBDLVector3d = RBDL::Math::Vector3d; // Eigen::Vector3d 이라는 동일 이름으로 인해 RBDL::Math::Vector3d는 RBDLVector3d로 변경해준다.
 using RBDLVectorNd = RBDL::Math::VectorNd;
 using RBDLMatrixNd = RBDL::Math::MatrixNd;
 using RBDLMatrix3d = RBDL::Math::Matrix3d;
 using RBDLJoint = RBDL::Joint;
 
-#define NUM_OF_JOINTS_WITH_TOOL 8
-#define NUM_OF_JOINTS_WITHOUT_TOOL 6
+#define NUM_OF_JOINTS_WITH_TOOL 8 // TOOL = End Effector, 그래서 좌,우 하나씩 prismatic joint로 바꾸어서 8개가 되었다.
+#define NUM_OF_JOINTS_WITHOUT_TOOL 6 // e.e. 제외 joint 수
 #define JOINT_VEL_LIMIT 100
 
 #define PI 3.14159265358979
@@ -76,6 +76,7 @@ using RBDLJoint = RBDL::Joint;
 #define RAD2DEG		57.295779513082323
 #define G -9.81;
 
+// 링크들의 길이
 #define L1 0.1019
 #define L2 0.25
 #define L3 0.25
@@ -84,6 +85,7 @@ using RBDLJoint = RBDL::Joint;
 #define L6 0.135
 // #define L6 0.06
 
+// 링크들의 무게_for Vision Mode of v1 (v2는 현재 RBDL을 쓰기 때문에 상관없다.)
 #define m_Link1 0.573
 #define m_Link2 0.729
 #define m_Link3 0.490
@@ -419,7 +421,7 @@ namespace gazebo
     //                             Matrix3d desired_orientation, Matrix3d present_orientation);
     // MatrixXd jacobian();
   };
-  GZ_REGISTER_MODEL_PLUGIN(STArmPlugin);
+  GZ_REGISTER_MODEL_PLUGIN(STArmPlugin); // ST-Arm class를 gazebo 모델에 등록해준다.
 }
 
 #endif  // end of the ST_ARM_PLUGIN_H
