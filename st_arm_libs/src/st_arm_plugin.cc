@@ -317,7 +317,7 @@ namespace gazebo
       last_th[i] = th[i];
     }
 
-    for(uint8_t i=0; i<NUM_OF_JOINTS_WITH_TOOL; i++)
+    for(uint8_t i=0; i<NUM_OF_JOINTS_WITH_TOOL; i++) // limit 걸어놓기
     {
       if(abs(th_dot[i]) > JOINT_VEL_LIMIT) th_dot[i] = 0;
     }
