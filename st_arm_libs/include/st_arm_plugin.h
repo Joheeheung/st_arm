@@ -130,7 +130,7 @@ typedef struct
   RBDLMatrixNd inertia_matrix;
   RBDLMatrixNd ts_p, ts_v;
   RBDLMatrix3d rotation_ee, rotation_ee_transpose;
-  RBDLVector3d position_ee;
+  RBDLVector3d position_ee, rpy_ee, rpy_desired, position_desired;
 
   unsigned int base_id, shoulder_yaw_id, shoulder_pitch_id, elbow_pitch_id, wrist_pitch_id, wrist_roll_id, wrist_yaw_id, gripper_id;                        //id have information of the body
   RBDLBody base_link, shoulder_yaw_link, shoulder_pitch_link, elbow_pitch_link, wrist_pitch_link, wrist_roll_link, wrist_yaw_link, gripper_link;

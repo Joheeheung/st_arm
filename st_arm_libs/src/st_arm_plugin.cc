@@ -1208,32 +1208,24 @@ namespace gazebo
     gain_r << 1, 0.3, 0.5, 0.5, 0.5, 0.5; // affects joint limit control
     
     cnt_time = cnt * dt;   
-    
-
-  
-    ee_position << T06(0,3), T06(1,3), T06(2,3); //ee의 현재 Position
-    ee_rotation = T06.block<3,3>(0,0);
 
     ref_ee_position = hmd_position; // hmd의 position을 desired position으로 저장ㅇㅇ
     ref_ee_rotation = hmd_quaternion.normalized().toRotationMatrix(); //hmd quaternion을 rotation matrix로 변환 desired position으로 저장
 
-    arm_rbdl.error = PoseDifference(ref_ee_position, ref_ee_rotation, ee_position, ee_rotation);
-    arm_rbdl.virtual_spring = arm_rbdl.ts_p * arm_rbdl.error;
-    // arm_rbdl.error_dot = PoseDifference(ref_ee_position, ref_ee_rotation, ee_position, ee_rotation);   // TODO
-    // arm_rbdl.virtual_damping = arm_rbdl.ts_v * arm_rbdl.error_dot;
-
+    SetRBDLVariables();
 
     arm_rbdl.jacobian_swap = RBDLMatrixNd::Zero(6,6);
     RBDL::CalcPointJacobian6D(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), arm_rbdl.jacobian_swap, true);
     arm_rbdl.position_ee = RBDL::CalcBodyToBaseCoordinates(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), false);
     arm_rbdl.rotation_ee = RBDL::CalcBodyWorldOrientation(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, false);
-    arm_rbdl.rotation_ee_transpose = arm_rbdl.rotation_ee.transpose();
+    arm_rbdl.rpy_ee = arm_rbdl.rotation_ee.eulerAngles(2, 1, 0);
+    double pi = arm_rbdl.rpy_ee(0), theta = arm_rbdl.rpy_ee(1), psi = arm_rbdl.rpy_ee(2);
 
-    double pi = 0, theta = 0, psi = 0;
-
-    pi = atan2(arm_rbdl.rotation_ee_transpose(1,0),arm_rbdl.rotation_ee_transpose(0,0));
-    theta = atan2(-arm_rbdl.rotation_ee_transpose(2,0), cos(pi)*arm_rbdl.rotation_ee_transpose(0,0) + sin(pi)*arm_rbdl.rotation_ee_transpose(1,0));
-    psi = atan2(sin(pi)*arm_rbdl.rotation_ee_transpose(0,2) - cos(pi)*arm_rbdl.rotation_ee_transpose(1,2), -sin(pi)*arm_rbdl.rotation_ee_transpose(0,1) + cos(pi)*arm_rbdl.rotation_ee_transpose(1,1));
+    // arm_rbdl.rotation_ee_transpose = arm_rbdl.rotation_ee.transpose();
+    // double pi = 0, theta = 0, psi = 0;
+    // pi = atan2(arm_rbdl.rotation_ee_transpose(1,0),arm_rbdl.rotation_ee_transpose(0,0));
+    // theta = atan2(-arm_rbdl.rotation_ee_transpose(2,0), cos(pi)*arm_rbdl.rotation_ee_transpose(0,0) + sin(pi)*arm_rbdl.rotation_ee_transpose(1,0));
+    // psi = atan2(sin(pi)*arm_rbdl.rotation_ee_transpose(0,2) - cos(pi)*arm_rbdl.rotation_ee_transpose(1,2), -sin(pi)*arm_rbdl.rotation_ee_transpose(0,1) + cos(pi)*arm_rbdl.rotation_ee_transpose(1,1));
     
       // Change the Row
     for(int j = 0; j < 6; j++)
@@ -1254,8 +1246,9 @@ namespace gazebo
 
     arm_rbdl.jacobian_ana_inverse = arm_rbdl.jacobian_ana.inverse();
 
-    SetRBDLVariables();
-
+    arm_rbdl.rpy_desired = ref_ee_rotation.eulerAngles(2, 1, 0);
+    arm_rbdl.position_desired = ref_ee_position;
+    arm_rbdl.x_desired << arm_rbdl.position_desired, arm_rbdl.rpy_desired;
 
     arm_rbdl.x_actual << arm_rbdl.position_ee, psi, theta, pi;
     arm_rbdl.error = arm_rbdl.x_desired - arm_rbdl.x_actual;
