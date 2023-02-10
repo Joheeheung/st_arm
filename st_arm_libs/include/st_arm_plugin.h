@@ -58,6 +58,7 @@ using std::sqrt;
 namespace RBDL = RigidBodyDynamics;
 namespace RBDLMath = RigidBodyDynamics::Math;
 
+// v2 RBDL
 using RBDLModel = RBDL::Model;
 using RBDLBody = RBDL::Body;
 using RBDLVector3d = RBDL::Math::Vector3d; // Eigen::Vector3d 이라는 동일 이름으로 인해 RBDL::Math::Vector3d는 RBDLVector3d로 변경해준다.
@@ -65,6 +66,7 @@ using RBDLVectorNd = RBDL::Math::VectorNd;
 using RBDLMatrixNd = RBDL::Math::MatrixNd;
 using RBDLMatrix3d = RBDL::Math::Matrix3d;
 using RBDLJoint = RBDL::Joint;
+
 
 #define NUM_OF_JOINTS_WITH_TOOL 8 // TOOL = End Effector, 그래서 좌,우 하나씩 prismatic joint로 바꾸어서 8개가 되었다.
 #define NUM_OF_JOINTS_WITHOUT_TOOL 6 // e.e. 제외 joint 수
@@ -76,7 +78,7 @@ using RBDLJoint = RBDL::Joint;
 #define RAD2DEG		57.295779513082323
 #define G -9.81;
 
-// 링크들의 길이
+// 링크들의 길이_ v2
 #define L1 0.1019
 #define L2 0.25
 #define L3 0.25
@@ -118,8 +120,17 @@ using RBDLJoint = RBDL::Joint;
 typedef struct
 {
   RBDLModel* rbdl_model;
-  RBDLVectorNd q, q_dot, q_d_dot, tau;
-  RBDLMatrixNd jacobian, jacobian_prev, jacobian_dot, jacobian_inverse;
+  RBDLVectorNd q, q_dot, q_d_dot, tau, tau_inertia, q_d_dot_ctc, ee_x, ee_x_dot;
+  RBDLVectorNd virtual_damping, virtual_spring, x_desired_d_dot;
+  RBDLVectorNd x_ctc_d_dot, x_actual_dot, x_actual, x_desired_dot, x_desired_dot_last, x_desired, x_desired_last;
+  RBDLVectorNd error, error_dot;
+  RBDLMatrixNd jacobian, jacobian_swap, jacobian_prev, jacobian_dot, jacobian_inverse;
+  RBDLMatrixNd jacobian_ana, jacobian_ana_swap, jacobian_ana_prev, jacobian_ana_dot, jacobian_ana_inverse;
+  RBDLMatrixNd geometric_to_analytic;
+  RBDLMatrixNd inertia_matrix;
+  RBDLMatrixNd ts_p, ts_v;
+  RBDLMatrix3d rotation_ee, rotation_ee_transpose;
+  RBDLVector3d position_ee;
 
   unsigned int base_id, shoulder_yaw_id, shoulder_pitch_id, elbow_pitch_id, wrist_pitch_id, wrist_roll_id, wrist_yaw_id, gripper_id;                        //id have information of the body
   RBDLBody base_link, shoulder_yaw_link, shoulder_pitch_link, elbow_pitch_link, wrist_pitch_link, wrist_roll_link, wrist_yaw_link, gripper_link;
@@ -128,7 +139,7 @@ typedef struct
 } Arm_RBDL;
 
 Arm_RBDL arm_rbdl;
-
+Arm_RBDL arm1_rbdl;
 
 namespace gazebo
 {
@@ -374,6 +385,7 @@ namespace gazebo
     void Motion4();
     void Motion5();
     void Motion6();
+    void Motion7();
     void SwitchMode(const std_msgs::Int32Ptr & msg);
     void SwitchGain(const std_msgs::Int32Ptr & msg);
     void SwitchGainJointSpaceP(const std_msgs::Float32MultiArrayConstPtr &msg);
