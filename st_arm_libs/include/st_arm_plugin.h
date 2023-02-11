@@ -120,7 +120,7 @@ using RBDLJoint = RBDL::Joint;
 typedef struct
 {
   RBDLModel* rbdl_model;
-  RBDLVectorNd q, q_dot, q_d_dot, tau, tau_inertia, q_d_dot_ctc, ee_x, ee_x_dot;
+  RBDLVectorNd q, q_dot, q_d_dot, q_d_dot_ctc, tau_nonlinear, tau_inertia, ee_x0, ee_x_dot;
   RBDLVectorNd virtual_damping, virtual_spring, x_desired_d_dot;
   RBDLVectorNd x_ctc_d_dot, x_actual_dot, x_actual, x_desired_dot, x_desired_dot_last, x_desired, x_desired_last;
   RBDLVectorNd error, error_dot;
@@ -128,7 +128,7 @@ typedef struct
   RBDLMatrixNd jacobian_ana, jacobian_ana_swap, jacobian_ana_prev, jacobian_ana_dot, jacobian_ana_inverse;
   RBDLMatrixNd geometric_to_analytic;
   RBDLMatrixNd inertia_matrix;
-  RBDLMatrixNd ts_p, ts_v;
+  RBDLMatrixNd ts_p, ts_v; //Task Space Gain P, D
   RBDLMatrix3d rotation_ee, rotation_ee_transpose;
   RBDLVector3d position_ee, rpy_ee, rpy_desired, position_desired;
 
@@ -139,7 +139,6 @@ typedef struct
 } Arm_RBDL;
 
 Arm_RBDL arm_rbdl;
-Arm_RBDL arm1_rbdl;
 
 namespace gazebo
 {
@@ -189,7 +188,7 @@ namespace gazebo
     common::Time last_update_time;
     common::Time current_time;
     event::ConnectionPtr update_connection;
-    double dt;
+    double dt = 0.001;
     double time{0};
     double trajectory;
 
@@ -355,7 +354,8 @@ namespace gazebo
       Motion_3,
       Motion_4,
       Motion_5,
-      Motion_6
+      Motion_6,
+      Motion_7
     };
     enum ControlMode control_mode;
 

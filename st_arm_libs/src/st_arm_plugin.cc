@@ -98,7 +98,7 @@ namespace gazebo
     sub_weight_est_start_estimation = node_handle.subscribe("unity/calibrate_obj_weight", 100, &gazebo::STArmPlugin::SwitchOnAddingEstimatedObjWeightToRBDL, this);
   }
 
-//
+
   void STArmPlugin::InitializeRBDLVariables()
   {
     rbdl_check_api_version(RBDL_API_VERSION);
@@ -166,7 +166,7 @@ namespace gazebo
     arm_rbdl.q = RBDLVectorNd::Zero(6);
     arm_rbdl.q_dot = RBDLVectorNd::Zero(6);
     arm_rbdl.q_d_dot = RBDLVectorNd::Zero(6);
-    arm_rbdl.tau = RBDLVectorNd::Zero(6);
+    arm_rbdl.tau_nonlinear = RBDLVectorNd::Zero(6);
 
     arm_rbdl.jacobian = RBDLMatrixNd::Zero(6,6);
     arm_rbdl.jacobian_prev = RBDLMatrixNd::Zero(6,6);
@@ -253,15 +253,50 @@ namespace gazebo
     arm_rbdl.q_dot = RBDLVectorNd::Zero(6);
     arm_rbdl.q_d_dot = RBDLVectorNd::Zero(6);
     arm_rbdl.q_d_dot_ctc = RBDLVectorNd::Zero(6);
-    arm_rbdl.tau = RBDLVectorNd::Zero(6);
+    arm_rbdl.tau_nonlinear = RBDLVectorNd::Zero(6);
     arm_rbdl.tau_inertia = RBDLVectorNd::Zero(6);
-  
+    arm_rbdl.ee_x0 = RBDLVectorNd::Zero(6);
+    arm_rbdl.ee_x_dot = RBDLVectorNd::Zero(6);
+
+    arm_rbdl.virtual_damping = RBDLVectorNd::Zero(6);
+    arm_rbdl.virtual_spring = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_desired_d_dot = RBDLVectorNd::Zero(6);
+
+    arm_rbdl.x_ctc_d_dot = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_actual = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_actual_dot = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_desired_dot = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_desired_dot_last = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_desired = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_desired_last = RBDLVectorNd::Zero(6);
+    arm_rbdl.error = RBDLVectorNd::Zero(6);
+    arm_rbdl.error_dot = RBDLVectorNd::Zero(6);
 
     arm_rbdl.jacobian = RBDLMatrixNd::Zero(6,6);
     arm_rbdl.jacobian_prev = RBDLMatrixNd::Zero(6,6);
     arm_rbdl.jacobian_dot = RBDLMatrixNd::Zero(6,6);
     arm_rbdl.jacobian_inverse = RBDLMatrixNd::Zero(6,6);
+
+    arm_rbdl.jacobian_ana = RBDLMatrixNd::Zero(6,6);
+    arm_rbdl.jacobian_ana_swap = RBDLMatrixNd::Zero(6,6);
+    arm_rbdl.jacobian_ana_prev  = RBDLMatrixNd::Zero(6,6);
+    arm_rbdl.jacobian_ana_dot = RBDLMatrixNd::Zero(6,6);
+    arm_rbdl.jacobian_ana_inverse = RBDLMatrixNd::Zero(6,6);
+
+    arm_rbdl.geometric_to_analytic = RBDLMatrixNd::Zero(6,6);
+
     arm_rbdl.inertia_matrix = RBDLMatrixNd::Zero(6,6);
+
+    arm_rbdl.ts_p = RBDLMatrixNd::Zero(6,6);
+    arm_rbdl.ts_v = RBDLMatrixNd::Zero(6,6);
+
+    arm_rbdl.rotation_ee = RBDLMatrix3d::Zero(3,3);
+    arm_rbdl.rotation_ee_transpose = RBDLMatrix3d::Zero(3,3);
+    
+    arm_rbdl.position_ee = RBDLVector3d::Zero(3);
+    arm_rbdl.position_desired = RBDLVector3d::Zero(3);
+    arm_rbdl.rpy_ee = RBDLVector3d::Zero(3);
+    arm_rbdl.rpy_desired = RBDLVector3d::Zero(3);
 
     std::cout << "RBDL Initialize function success" << std::endl;
   }
@@ -448,6 +483,7 @@ namespace gazebo
     else if (control_mode == Motion_4) Motion4();
     else if (control_mode == Motion_5) Motion5();
     else if (control_mode == Motion_6) Motion6();
+    else if (control_mode == Motion_7) Motion7();
     else Idle();
   }
 
@@ -475,6 +511,7 @@ namespace gazebo
     else if (msg -> data == 4) control_mode = Motion_4; 
     else if (msg -> data == 5) control_mode = Motion_5;   
     else if (msg -> data == 6) control_mode = Motion_6;   
+    else if (msg -> data == 7) control_mode = Motion_7;   
     else                       control_mode = IDLE;    
   }
 
@@ -520,7 +557,7 @@ namespace gazebo
     cnt++;
   }
 
-  //	Infinity Drawer || Gravity Compensation
+  // Task Space PD Control ||	Infinity Drawer || Gravity Compensation
   void STArmPlugin::Motion1()
   { 
     // gain_p << 2000, 200, 200;
@@ -634,10 +671,10 @@ namespace gazebo
 
     virtual_spring << ee_force(0), ee_force(1), ee_force(2), ee_momentum(0), ee_momentum(1), ee_momentum(2);
   
-    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL);
+    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
     for(uint8_t i = 0; i < 6; i++)
     {
-      tau_rbdl(i) = arm_rbdl.tau(i);
+      tau_rbdl(i) = arm_rbdl.tau_nonlinear(i);
     }
 
     tau = Jacobian.transpose() * virtual_spring;
@@ -668,10 +705,10 @@ namespace gazebo
   //	RBDL
   void STArmPlugin::Motion2()
   {
-    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL);
+    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
     for(uint8_t i = 0; i < 6; i++)
     {
-      tau_rbdl(i) = arm_rbdl.tau(i);
+      tau_rbdl(i) = arm_rbdl.tau_nonlinear(i);
     }
     for(uint8_t i = 0; i < 6; i++)
     {
@@ -789,11 +826,11 @@ namespace gazebo
 
     SetRBDLVariables();
 
-    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL);
+    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
     // RBDL::InverseDynamics(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.q_d_dot, arm_rbdl.tau, NULL);
     for(uint8_t i = 0; i < 6; i++)
     {
-      tau_gravity_compensation(i) = arm_rbdl.tau(i);
+      tau_gravity_compensation(i) = arm_rbdl.tau_nonlinear(i);
     }
 
     for(uint8_t i=0; i<6; i++)
@@ -835,10 +872,10 @@ namespace gazebo
 
     InverseSolverUsingJacobian(ref_ee_position, ref_ee_rotation);
 
-    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL);
+    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
     for(uint8_t i = 0; i < 6; i++)
     {
-      tau_rbdl(i) = arm_rbdl.tau(i);
+      tau_rbdl(i) = arm_rbdl.tau_nonlinear(i);
     }
 
     for(uint8_t i=0; i<6; i++) 
@@ -1168,10 +1205,10 @@ namespace gazebo
 
     virtual_spring << ee_force(0), ee_force(1), ee_force(2), ee_momentum(0), ee_momentum(1), ee_momentum(2);
   
-    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL);
+    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
     for(uint8_t i = 0; i < 6; i++)
     {
-      tau_rbdl(i) = arm_rbdl.tau(i);
+      tau_rbdl(i) = arm_rbdl.tau_nonlinear(i);
     }
 
     tau = Jacobian.transpose() * virtual_spring;
@@ -1196,21 +1233,49 @@ namespace gazebo
     cnt++;
   }
 
-  //  For CTC
+  //  For CTC || Infinity Drawer
   void STArmPlugin::Motion7()
-{
-    gain_p << 1, 1, 1;
-    gain_d << 5, 5, 5;
-    gain_w << 10, 10, 10;
+  {
+    dt = 0.001;
+    VectorXd temp_gain_p(6);
+    // temp_gain_p << 1, 1, 1, 1, 1, 1;
+    temp_gain_p << 1, 1, 1, 0, 0, 0;
+    VectorXd temp_gain_v(6);
+    // temp_gain_v << 1, 1, 1, 1, 1, 1;
+    temp_gain_v << 1, 1, 1, 0, 0, 0;
+
+    for(int i=0; i<6; i++) {
+      arm_rbdl.ts_p(i, i) = temp_gain_p(i);
+      arm_rbdl.ts_v(i, i) = temp_gain_v(i);
+    }
+
     threshold << 0.2, 0.2, 0.2, 0.2, 0.2, 0.2; // limit threshold angle
     joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
                   -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
     gain_r << 1, 0.3, 0.5, 0.5, 0.5, 0.5; // affects joint limit control
     
-    cnt_time = cnt * dt;   
+    // cnt_time = cnt * dt;   
 
-    ref_ee_position = hmd_position; // hmd의 position을 desired position으로 저장ㅇㅇ
-    ref_ee_rotation = hmd_quaternion.normalized().toRotationMatrix(); //hmd quaternion을 rotation matrix로 변환 desired position으로 저장
+    //for infinity Trajectory
+    step_time = 3;
+    cnt_time = cnt * dt; 
+
+    if (cnt<1) initial_ee_position << 0.4, 0, 0.3;
+
+    if(cnt_time <= step_time*100)
+    { 
+      ref_ee_position(0) = initial_ee_position(0) - 0.2*abs(sin(PI/2*(cnt_time/step_time)));
+      ref_ee_position(1) = initial_ee_position(1) - 0.3*sin(PI/2*(cnt_time/step_time));
+      ref_ee_position(2) = initial_ee_position(2) + 0.2*sin(PI*(cnt_time/step_time));
+      ref_ee_quaternion.w() = 1;
+      ref_ee_quaternion.x() = 0;
+      ref_ee_quaternion.y() = 0;
+      ref_ee_quaternion.z() = 0;
+    }
+    ref_ee_rotation = ref_ee_quaternion.normalized().toRotationMatrix();
+
+    // ref_ee_position = hmd_position; // hmd의 position을 desired position으로 저장
+    // ref_ee_rotation = hmd_quaternion.normalized().toRotationMatrix(); //hmd quaternion을 rotation matrix로 변환 desired position으로 저장
 
     SetRBDLVariables();
 
@@ -1218,7 +1283,7 @@ namespace gazebo
     RBDL::CalcPointJacobian6D(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), arm_rbdl.jacobian_swap, true);
     arm_rbdl.position_ee = RBDL::CalcBodyToBaseCoordinates(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), false);
     arm_rbdl.rotation_ee = RBDL::CalcBodyWorldOrientation(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, false);
-    arm_rbdl.rpy_ee = arm_rbdl.rotation_ee.eulerAngles(2, 1, 0);
+    arm_rbdl.rpy_ee = arm_rbdl.rotation_ee.eulerAngles(2, 1, 0); // "z -> y -> x" Rotation of Euler Angle representation
     double pi = arm_rbdl.rpy_ee(0), theta = arm_rbdl.rpy_ee(1), psi = arm_rbdl.rpy_ee(2);
 
     // arm_rbdl.rotation_ee_transpose = arm_rbdl.rotation_ee.transpose();
@@ -1232,7 +1297,7 @@ namespace gazebo
     {
       for(int i = 0; i < 3; i++)
       {
-        arm_rbdl.jacobian(i,j) = arm_rbdl.jacobian_swap(i+3,j);  // linear // 저장한게 방위,위치 순이어서 이를 위치, 방위순으로 재정렬
+       arm_rbdl.jacobian(i,j) = arm_rbdl.jacobian_swap(i+3,j);  // linear // 저장한게 방위,위치 순이어서 이를 위치, 방위순으로 재정렬
       }
       for(int i = 3; i < 6; i++)
       {
@@ -1270,15 +1335,15 @@ namespace gazebo
     arm_rbdl.q_d_dot_ctc = arm_rbdl.jacobian_ana_inverse * (arm_rbdl.x_ctc_d_dot - arm_rbdl.jacobian_ana_dot * arm_rbdl.q_dot);
 
 
-    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL);
-    arm_rbdl.inertia_matrix = RBDLMatrixNd::Zero(6,6);
-    RBDL::CompositeRigidBodyAlgorithm(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.inertia_matrix, false);
-    arm_rbdl.tau_inertia = arm_rbdl.inertia_matrix * arm_rbdl.q_d_dot_ctc;
+    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL); // Nonlinear 토크 생성
+    arm_rbdl.inertia_matrix = RBDLMatrixNd::Zero(6,6);// inertia Matrix 0 초기화
+    RBDL::CompositeRigidBodyAlgorithm(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.inertia_matrix, false); // inertia Matrix 생성
+    arm_rbdl.tau_inertia = arm_rbdl.inertia_matrix * arm_rbdl.q_d_dot_ctc;// inertia 토크 생성
 
     
     for(uint8_t i = 0; i < 6; i++)
     {
-      tau_gravity_compensation(i) = arm_rbdl.tau(i);
+      tau_gravity_compensation(i) = arm_rbdl.tau_nonlinear(i);
       tau(i) = arm_rbdl.tau_inertia(i);
     }
 
@@ -1287,11 +1352,12 @@ namespace gazebo
       if(th(i)>joint_limit(0,i)-threshold(i) && tau(i)>0 || th(i)<joint_limit(1,i)+threshold(i) && tau(i)<0)
         joint_torque(i) = gain_r(i)*tau_gravity_compensation(i);
       else
-        joint_torque(i) = tau(i) + gain_r(i)*tau_gravity_compensation(i); 
+        joint_torque(i) = tau(i) + gain_r(i)*tau_gravity_compensation(i);  //CTC 토크
     }
 
     cnt++;
   }
+
 
   void STArmPlugin::HMDPoseCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
   {
