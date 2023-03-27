@@ -210,6 +210,23 @@ namespace Dynamics
     }
 
 
+    void JMDynamics::GenerateTorqueOneMotorTuning()
+    {
+        count++;
+        float count_time = count * dt;
+
+        ref_th << 0, 0, 0, 0, 0, 0, 0;
+
+        float one_link_gravity_compensation = 0.2 * 10 * sin(th[0]);
+
+        ref_th[0] = sin(PI*(count_time/step_time)) * PI * 0.5 ;
+
+        joint_torque[0] = gain_p_joint_space[0]     *   (ref_th[0] - th[0])                     //  P
+                        - gain_d_joint_space[0]     *   th_dot_sma_filtered[0]                  //  D
+                        + gain_r[0]                 *   one_link_gravity_compensation;          //  gravity compensation
+    }
+
+
     void JMDynamics::GenerateTrajectory(){
         float count_time = count * dt;
         count++;   
@@ -521,11 +538,11 @@ namespace Dynamics
         ee_position << T06(0,3), T06(1,3), T06(2,3);
 
         //---updated accurate com---
-        shoulder_link_com << 0.092/L1*T01(0,3), 0.092/L1*T01(1,3), 0.092/L1*T01(2,3);
-        arm_link_com << T01(0,3)+0.04/L2*T12(0,3), T01(1,3)+0.04/L2*T12(1,3), T01(2,3)+0.04/L2*T12(2,3);
-        elbow_link_com << T02(0,3)+0.13/L3*T23(0,3), T02(1,3)+0.13/L3*T23(1,3), T02(2,3)+0.13/L3*T23(2,3);
-        forearm_link_com << T04(0,3)+0.046/L5*T45(0,3), T04(1,3)+0.046/L5*T45(1,3), T04(2,3)+0.046/L5*T45(2,3);
-        wrist_link_com << T04(0,3)+0.095/L5*T45(0,3), T04(1,3)+0.095/L5*T45(1,3), T04(2,3)+0.095/L5*T45(2,3);
+        shoulder_link_com << 0.095/L1*T01(0,3), 0.095/L1*T01(1,3), 0.095/L1*T01(2,3);
+        arm_link_com << T01(0,3)+0.216/L2*T12(0,3), T01(1,3)+0.216/L2*T12(1,3), T01(2,3)+0.216/L2*T12(2,3);
+        elbow_link_com << T02(0,3)+0.160/L3*T23(0,3), T02(1,3)+0.160/L3*T23(1,3), T02(2,3)+0.160/L3*T23(2,3);
+        forearm_link_com << T04(0,3)+0.045/L5*T45(0,3), T04(1,3)+0.045/L5*T45(1,3), T04(2,3)+0.045/L5*T45(2,3);
+        wrist_link_com << T04(0,3)+0.093/L5*T45(0,3), T04(1,3)+0.093/L5*T45(1,3), T04(2,3)+0.093/L5*T45(2,3);
         endeffector_link_com << T06(0,3), T06(1,3), T06(2,3);
 
         manipulator_com <<  (m_Link1*shoulder_link_com(0) + m_Link2*arm_link_com(0) + m_Link3*elbow_link_com(0) + m_Link4*forearm_link_com(0) + m_Link5*wrist_link_com(0) + m_Link6*endeffector_link_com(0)) / m_Arm,
@@ -589,25 +606,32 @@ namespace Dynamics
         // tau_gravity_compensation[4] = 0.10301*cos(th[5] + 1.5708)*sin(th[4] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
         // tau_gravity_compensation[5] = 0.10301*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.10301*cos(th[4] + 1.5708)*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));   
 
-        tau_gravity_compensation[0] = 0.0;
-        tau_gravity_compensation[1] = 1.9318*sin(th[1])*sin(th[2]) - 1.9318*cos(th[1])*cos(th[2]) - 2.9498*cos(th[1]) + 0.43025*cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + 0.43025*sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])) + 0.14096*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
-        tau_gravity_compensation[2] = 1.9318*sin(th[1])*sin(th[2]) - 1.9318*cos(th[1])*cos(th[2]) + 0.43025*cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + 0.43025*sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])) + 0.14096*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
-        tau_gravity_compensation[3] = 0.43025*cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + 0.43025*sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])) + 0.14096*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
-        tau_gravity_compensation[4] = 0.14096*cos(th[5] + 1.5708)*sin(th[4] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
-        tau_gravity_compensation[5] = 0.14096*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
-    
-        for(uint8_t i=0; i<6; i++) {
-            tau_viscous_damping[i] = gain_d_joint_space[i] * th_dot[i]; 
-            tau_gravity_compensation[i] = tau_gravity_compensation[i] * gain_r[i];
+        // tau_gravity_compensation[0] = 0.0;
+        // tau_gravity_compensation[1] = 1.9318*sin(th[1])*sin(th[2]) - 1.9318*cos(th[1])*cos(th[2]) - 2.9498*cos(th[1]) + 0.43025*cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + 0.43025*sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])) + 0.14096*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
+        // tau_gravity_compensation[2] = 1.9318*sin(th[1])*sin(th[2]) - 1.9318*cos(th[1])*cos(th[2]) + 0.43025*cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + 0.43025*sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])) + 0.14096*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
+        // tau_gravity_compensation[3] = 0.43025*cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + 0.43025*sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])) + 0.14096*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
+        // tau_gravity_compensation[4] = 0.14096*cos(th[5] + 1.5708)*sin(th[4] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
+        // tau_gravity_compensation[5] = 0.14096*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14096*cos(th[4] + 1.5708)*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
+
+        RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau, NULL); // 코리올리, 중력보상을 합쳐서 Nonlinear Effects라고 한다.
+        for(uint8_t i = 0; i < 6; i++)
+        {
+            tau_gravity_compensation(i) = arm_rbdl.tau(i); //tau_gravity_compensation : 코리올리 + 중력보상 입니다. 이름 수정 안한거일 뿐.
         }
 
-        tau =  tau_com + tau_rotational + tau_gravity_compensation - tau_viscous_damping;
+        for(uint8_t i=0; i<6; i++) {
+            tau_viscous_damping[i] = gain_d_joint_space[i] * th_dot[i];
+            tau_nonlinear_effects[i] = tau_gravity_compensation[i] * gain_r[i];
+        }
+
+        tau =  tau_com + tau_rotational + tau_nonlinear_effects - tau_viscous_damping;
         for(int i=0; i<6; i++){
             if(th(i) > joint_limit(0,i) - threshold(i) && tau(i) > 0 || th(i) < joint_limit(1,i) + threshold(i) && tau(i) < 0)
-                joint_torque[i] = tau_gravity_compensation[i] - tau_viscous_damping[i];    //we can add more damping here
-            else joint_torque[i] = tau[i]; 
+                joint_torque[i] = tau_nonlinear_effects[i] - tau_viscous_damping[i];    //we can add more damping here
+            else joint_torque[i] = tau[i];      
         }
     }
+
 
     // a argument   // m member    // l local   //p pointer     //r reference   //
     void JMDynamics::GenerateGripperTorque()
@@ -656,59 +680,59 @@ namespace Dynamics
         arm_rbdl.rbdl_model = new RBDLModel();
         arm_rbdl.rbdl_model->gravity = RBDL::Math::Vector3d(0.0, 0.0, -9.81);
 
-        arm_rbdl.base_inertia = RBDLMatrix3d(0.00033, 0,        0,
-                                            0,       0.00034,  0,
-                                            0,       0,        0.00056);
+        arm_rbdl.base_inertia = RBDLMatrix3d(0.0002, 0,        0,
+                                            0,       0.0002,  0,
+                                            0,       0,        0.00033);
 
         arm_rbdl.shoulder_yaw_inertia = RBDLMatrix3d( 0.00024,  0,        0,
                                                     0,        0.00040,  0,
                                                     0,        0,        0.00026);
 
-        arm_rbdl.shoulder_pitch_inertia = RBDLMatrix3d(0.00028, 0,        0,
-                                                    0,       0.00064,  0,
-                                                    0,       0,        0.00048);
+        arm_rbdl.shoulder_pitch_inertia = RBDLMatrix3d(0.00029, 0,        0,
+                                                    0,       0.00072,  0,
+                                                    0,       0,        0.00055);
 
         arm_rbdl.elbow_pitch_inertia = RBDLMatrix3d(0.00003,  0,        0,
-                                                    0,        0.00019,  0,
-                                                    0,        0,        0.00020);
+                                                    0,        0.00025,  0,
+                                                    0,        0,        0.00026);
 
         arm_rbdl.wrist_pitch_inertia = RBDLMatrix3d(0.00002,  0,        0,
                                                     0,        0.00002,  0,
-                                                    0,        0,        0.00001);
+                                                    0,        0,        0.00002);
 
         arm_rbdl.wrist_roll_inertia = RBDLMatrix3d(0.00001,  0,        0,
                                                     0,        0.00002,  0,
-                                                    0,        0,        0.00001);
+                                                    0,        0,        0.00002);
 
-        arm_rbdl.wrist_yaw_inertia = RBDLMatrix3d(0.00006,  0,        0,
-                                                    0,        0.00003,  0,
-                                                    0,        0,        0.00005);
+        arm_rbdl.wrist_yaw_inertia = RBDLMatrix3d(0.00015,  0,        0,
+                                                    0,        0.00007,  0,
+                                                    0,        0,        0.00012);
 
         // arm_rbdl.base_link = RBDLBody(0.59468, RBDLVector3d(0, 0.00033, 0.03107), arm_rbdl.base_inertia);
         // arm_rbdl.base_joint = RBDLJoint(RBDL::JointType::JointTypeFixed, RBDLVector3d(0,0,0));
         // arm_rbdl.base_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(0, RBDL::Math::Xtrans(RBDLVector3d(0,0,0)), arm_rbdl.base_joint, arm_rbdl.base_link);
 
-        arm_rbdl.shoulder_yaw_link = RBDLBody(0.55230, RBDLVector3d(0.00007, -0.00199, 0.09998), arm_rbdl.shoulder_yaw_inertia);
+        arm_rbdl.shoulder_yaw_link = RBDLBody(0.54529, RBDLVector3d(-0.00021, -0.00134, 0.0957), arm_rbdl.shoulder_yaw_inertia);
         arm_rbdl.shoulder_yaw_joint = RBDLJoint(RBDL::JointType::JointTypeRevolute, RBDLVector3d(0,0,1));
         arm_rbdl.shoulder_yaw_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(0, RBDL::Math::Xtrans(RBDLVector3d(0,0,0)), arm_rbdl.shoulder_yaw_joint, arm_rbdl.shoulder_yaw_link);
 
-        arm_rbdl.shoulder_pitch_link = RBDLBody(0.65326, RBDLVector3d(0.22204, 0.04573, 0), arm_rbdl.shoulder_pitch_inertia);
+        arm_rbdl.shoulder_pitch_link = RBDLBody(0.66888, RBDLVector3d(0.21598, 0.045132, 0), arm_rbdl.shoulder_pitch_inertia);
         arm_rbdl.shoulder_pitch_joint = RBDLJoint(RBDL::JointType::JointTypeRevolute, RBDLVector3d(0,1,0));
-        arm_rbdl.shoulder_pitch_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(1, RBDL::Math::Xtrans(RBDLVector3d(0, 0, 0.1019)), arm_rbdl.shoulder_pitch_joint, arm_rbdl.shoulder_pitch_link);
+        arm_rbdl.shoulder_pitch_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(1, RBDL::Math::Xtrans(RBDLVector3d(0, 0, 0.0981)), arm_rbdl.shoulder_pitch_joint, arm_rbdl.shoulder_pitch_link);
 
-        arm_rbdl.elbow_pitch_link = RBDLBody(0.17029, RBDLVector3d(0.17044, 0.00120, 0.00004), arm_rbdl.elbow_pitch_inertia);
+        arm_rbdl.elbow_pitch_link = RBDLBody(0.18375, RBDLVector3d(0.16062, 0.00112, 0.00008), arm_rbdl.elbow_pitch_inertia);
         arm_rbdl.elbow_pitch_joint = RBDLJoint(RBDL::JointType::JointTypeRevolute, RBDLVector3d(0,1,0));
         arm_rbdl.elbow_pitch_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(2, RBDL::Math::Xtrans(RBDLVector3d(0.25,0,0)), arm_rbdl.elbow_pitch_joint, arm_rbdl.elbow_pitch_link);
 
-        arm_rbdl.wrist_pitch_link = RBDLBody(0.09234, RBDLVector3d(0.04278, 0, 0.01132), arm_rbdl.wrist_pitch_inertia);
+        arm_rbdl.wrist_pitch_link = RBDLBody(0.09437, RBDLVector3d(0.042379, 0, 0.01134), arm_rbdl.wrist_pitch_inertia);
         arm_rbdl.wrist_pitch_joint = RBDLJoint(RBDL::JointType::JointTypeRevolute, RBDLVector3d(0,1,0));
         arm_rbdl.wrist_pitch_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(3, RBDL::Math::Xtrans(RBDLVector3d(0.25,0,0)), arm_rbdl.wrist_pitch_joint, arm_rbdl.wrist_pitch_link);
 
-        arm_rbdl.wrist_roll_link = RBDLBody(0.08696, RBDLVector3d(0.09137, 0, 0.00036), arm_rbdl.wrist_roll_inertia);
+        arm_rbdl.wrist_roll_link = RBDLBody(0.08317, RBDLVector3d(0.09137, 0, 0.00009), arm_rbdl.wrist_roll_inertia);
         arm_rbdl.wrist_roll_joint = RBDLJoint(RBDL::JointType::JointTypeRevolute, RBDLVector3d(1,0,0));
         arm_rbdl.wrist_roll_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(4, RBDL::Math::Xtrans(RBDLVector3d(0,0,0)), arm_rbdl.wrist_roll_joint, arm_rbdl.wrist_roll_link);
 
-        arm_rbdl.wrist_yaw_link = RBDLBody(0.14876, RBDLVector3d(0.05210, 0.00034, 0.02218), arm_rbdl.wrist_yaw_inertia);
+        arm_rbdl.wrist_yaw_link = RBDLBody(0.35126, RBDLVector3d(0.05308, -0.00006, 0.04849), arm_rbdl.wrist_yaw_inertia);
         arm_rbdl.wrist_yaw_joint = RBDLJoint(RBDL::JointType::JointTypeRevolute, RBDLVector3d(0,0,1));
         arm_rbdl.wrist_yaw_id = arm_rbdl.rbdl_model->RBDLModel::AddBody(5, RBDL::Math::Xtrans(RBDLVector3d(0.1045,0,0)), arm_rbdl.wrist_yaw_joint, arm_rbdl.wrist_yaw_link);
 
