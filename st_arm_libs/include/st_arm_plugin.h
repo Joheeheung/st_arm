@@ -86,21 +86,28 @@ using RBDLJoint = RBDL::Joint;
 #define L5 0.1045
 #define L6 0.07
 
-// 링크들의 무게_for Vision Mode of v1 (v2는 현재 RBDL을 쓰기 때문에 상관없다.)
-#define m_Link1 0.54529
-#define m_Link2 0.66888
-#define m_Link3 0.18375
-#define m_Link4 0.09437
-#define m_Link5 0.08317
-#define m_Link6 0.35126
+//for caluculationg COM of st_arm_v3 
+#define joint0_to_L1_com 0.09579
+#define joint1_to_L2_com 0.21653
+#define joint2_to_L3_com 0.16062
+#define joint3_to_L4_com 0.04238
+#define joint4_to_L5_com 0.02707
 
-#define m_Arm 1.92672 // (m_Link1~6 합친거)
-#define M1 1.92672 // m_Arm
-#define M2 1.38143 //m_Link2+m_Link3+m_Link4+m_Link5+m_Link6;
-#define M3 0.71255 //m_Link3+m_Link4+m_Link5+m_Link6;
-#define M4 0.52880 //m_Link4+m_Link5+m_Link6;
-#define M5 0.43443 //m_Link5+m_Link6;
-#define M6 0.35126 //m_Link6;
+// st_arm_v3 mass
+#define m_Link1 0.54333
+#define m_Link2 0.67378
+#define m_Link3 0.19195
+#define m_Link4 0.083173
+#define m_Link5 0.083173
+#define m_Link6 0.35586
+
+#define m_Arm 1.931266 // (m_Link1~6 합친거)
+#define M1 1.931266 // m_Arm
+#define M2 1.38793 //m_Link2+m_Link3+m_Link4+m_Link5+m_Link6;
+#define M3 0.71415 //m_Link3+m_Link4+m_Link5+m_Link6;
+#define M4 0.52220 //m_Link4+m_Link5+m_Link6;
+#define M5 0.43903 //m_Link5+m_Link6;
+#define M6 0.35586 //m_Link6;
 #define inner_dt 0.001
 
 
@@ -122,14 +129,14 @@ typedef struct
   RBDLVectorNd q, q_dot, q_d_dot, q_d_dot_ctc, tau_nonlinear, tau_inertia, ee_x0, ee_x_dot;
   RBDLVectorNd virtual_damping, virtual_spring, x_desired_d_dot;
   RBDLVectorNd x_ctc_d_dot, x_actual_dot, x_actual, x_desired_dot, x_desired_dot_last, x_desired, x_desired_last;
-  RBDLVectorNd error, error_dot;
+  RBDLVectorNd x_error, x_error_dot;
   RBDLMatrixNd jacobian, jacobian_swap, jacobian_prev, jacobian_dot, jacobian_inverse;
   RBDLMatrixNd jacobian_ana, jacobian_ana_swap, jacobian_ana_prev, jacobian_ana_dot, jacobian_ana_inverse;
   RBDLMatrixNd geometric_to_analytic;
   RBDLMatrixNd inertia_matrix;
   RBDLMatrixNd ts_p, ts_v; //Task Space Gain P, D
-  RBDLMatrix3d rotation_ee, rotation_ee_transpose;
-  RBDLVector3d position_ee, rpy_ee, rpy_desired, position_desired;
+  RBDLMatrix3d ee_ori_act, ee_ori_act_trans;
+  RBDLVector3d ee_pos_act, rpy_ee, rpy_desired, position_desired;
 
   unsigned int base_id, shoulder_yaw_id, shoulder_pitch_id, elbow_pitch_id, wrist_pitch_id, wrist_roll_id, wrist_yaw_id, gripper_id;                        //id have information of the body
   RBDLBody base_link, shoulder_yaw_link, shoulder_pitch_link, elbow_pitch_link, wrist_pitch_link, wrist_roll_link, wrist_yaw_link, gripper_link;
@@ -180,7 +187,26 @@ namespace gazebo
 
     ros::Publisher pub_rbq3_joint_state;
 
+    // temporary Publisher
+    ros::Publisher pub_EE_pose;
 
+    ros::Publisher pub_virtual_spring_torque_0;
+    std_msgs::Float32 msg_virtual_spring_torque_0;
+    ros::Publisher pub_virtual_spring_torque_1;
+    std_msgs::Float32 msg_virtual_spring_torque_1;
+    ros::Publisher pub_virtual_spring_torque_2;
+    std_msgs::Float32 msg_virtual_spring_torque_2;
+
+    ros::Publisher pub_limited_torque_2;
+    std_msgs::Float32 msg_limited_torque_2;
+
+    ros::Publisher pub_ee_pi;
+    std_msgs::Float32 msg_ee_theta;
+    ros::Publisher pub_ee_theta;
+    std_msgs::Float32 msg_ee_pi;
+    ros::Publisher pub_ee_psi;
+    std_msgs::Float32 msg_ee_psi;
+ 
 
     const std::vector<std::string> joint_names = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint_g_l", "joint_g_r"};
     
@@ -190,7 +216,9 @@ namespace gazebo
     double dt = 0.001;
     double time{0};
     double trajectory;
+    double deg = (2/180)*PI; //for threshold
 
+    double pi = 0, theta = 0, psi = 0;
 
     //*************** IK Variables**************//
     MatrixXd JacobianForIK = MatrixXd::Zero(6,6);
@@ -223,6 +251,9 @@ namespace gazebo
     double cnt_time{0};
     unsigned int cnt{0};
     unsigned int start_flag{0};
+
+    MatrixXd unit_6 = MatrixXd::Zero(6,6);
+
 
     // float qw{0};
     // float qx{0};
@@ -263,7 +294,16 @@ namespace gazebo
     VectorXd J6 = VectorXd::Zero(6);
 
     MatrixXd Jacobian = MatrixXd::Zero(6,6);
+
+    MatrixXd Jacobian_tp = MatrixXd::Zero(6,6); // Jacobian transpose
+    MatrixXd J_for_dpi = MatrixXd::Zero(6,6); // 중간 연산 재료
+    MatrixXd J_inverse_for_dpi = MatrixXd::Zero(6,6); // 중간 연산 재료 inverse
+    MatrixXd Jacobian_e_dpi = MatrixXd::Zero(6,6); // Error Damped Pseudo Inverse Jacobian
+    MatrixXd W_term = MatrixXd::Zero(6,6); // 조정항
+
     MatrixXd J_CoM = MatrixXd::Zero(3,6);
+    double estimation_error_innerproduct = 0; // 추정 오차의 내적
+
 
     Vector3d  ee_position, 
               ee_velocity, 
@@ -271,6 +311,7 @@ namespace gazebo
               ref_ee_position, 
               initial_ee_position, 
               hmd_position;
+
     Vector3d gain_p, gain_d, gain_w;
     VectorXd gain_p_joint_space = VectorXd(NUM_OF_JOINTS_WITH_TOOL);
     VectorXd gain_d_joint_space = VectorXd(NUM_OF_JOINTS_WITH_TOOL);
@@ -279,6 +320,9 @@ namespace gazebo
     VectorXd gain_r = VectorXd(6);
     VectorXd threshold = VectorXd(6);
     Vector3d gain_p_task_space, gain_w_task_space;
+
+    VectorXd temp_gain_p = VectorXd(6);    
+    VectorXd temp_gain_v = VectorXd(6);
 
 
     Vector3d ee_rotation_x, ee_rotation_y, ee_rotation_z, 
@@ -317,9 +361,13 @@ namespace gazebo
     VectorXd tau_gravity_compensation = VectorXd::Zero(NUM_OF_JOINTS_WITH_TOOL);
     // VectorXd gripper_torque = VectorXd::Zero(2);
     VectorXd virtual_spring = VectorXd::Zero(6);
+    VectorXd estimation_error = VectorXd::Zero(6);
     VectorXd tau_viscous_damping = VectorXd::Zero(NUM_OF_JOINTS_WITH_TOOL);
     VectorXd tau_rbdl = VectorXd::Zero(6);
     VectorXd tau = VectorXd::Zero(6);
+    VectorXd tau_vs = VectorXd::Zero(6);
+    VectorXd tau_limit = VectorXd::Zero(6);
+
 
     // Temporary variables
 
@@ -354,7 +402,9 @@ namespace gazebo
       Motion_4,
       Motion_5,
       Motion_6,
-      Motion_7
+      Motion_7,
+      Motion_8,
+      Motion_9,
     };
     enum ControlMode control_mode;
 
@@ -385,6 +435,8 @@ namespace gazebo
     void Motion5();
     void Motion6();
     void Motion7();
+    void Motion8();
+    void Motion9();
     void SwitchMode(const std_msgs::Int32Ptr & msg);
     void SwitchGain(const std_msgs::Int32Ptr & msg);
     void SwitchGainJointSpaceP(const std_msgs::Float32MultiArrayConstPtr &msg);
@@ -416,6 +468,7 @@ namespace gazebo
     void GetJacobians(VectorXd a_th, MatrixXd Jacobian, Vector3d current_position, Matrix3d current_orientation);
 
     void UpdateJacobian(VectorXd a_th);
+    void Calc_Feedback_Pose(Arm_RBDL &rbdl);
 
     Vector3d PositionDifference(Vector3d desired_position, Vector3d present_position);
     Vector3d OrientationDifference(Matrix3d desired_orientation, Matrix3d present_orientation);

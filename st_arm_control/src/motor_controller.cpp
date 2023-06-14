@@ -6,9 +6,9 @@ extern Dynamixel _WRIST_MC;
 
 Motor_Controller::Motor_Controller()
 {
-  _DEV_MC[0].actuator_direction = -1;    _DEV_MC[0].actuator_gear_ratio = 6;  _DEV_MC[0].joint_initial_position = 0.0;       _DEV_MC[0].torque_to_data = 225;    _DEV_MC[0].actuator_torque_limit = 4.5*2;      _DEV_MC[0].data_to_radian = tic2radL; // 10430.2197
-  _DEV_MC[1].actuator_direction = -1;    _DEV_MC[1].actuator_gear_ratio = 8;  _DEV_MC[1].joint_initial_position = -PI;       _DEV_MC[1].torque_to_data = 200;    _DEV_MC[1].actuator_torque_limit = 4.5*2;      _DEV_MC[1].data_to_radian = tic2radL;   //53.42
-  _DEV_MC[2].actuator_direction =  1;    _DEV_MC[2].actuator_gear_ratio = 8;  _DEV_MC[2].joint_initial_position = 2.8992;    _DEV_MC[2].torque_to_data = 200;    _DEV_MC[2].actuator_torque_limit = 4.5*2;      _DEV_MC[2].data_to_radian = tic2radL;
+  _DEV_MC[0].actuator_direction = -1;    _DEV_MC[0].actuator_gear_ratio = 6;  _DEV_MC[0].joint_initial_position = 0.0;                    _DEV_MC[0].torque_to_data = 225;    _DEV_MC[0].actuator_torque_limit = 4.5*2;      _DEV_MC[0].data_to_radian = tic2radL; // 10430.2197
+  _DEV_MC[1].actuator_direction = -1;    _DEV_MC[1].actuator_gear_ratio = 8;  _DEV_MC[1].joint_initial_position = -PI;                    _DEV_MC[1].torque_to_data = 200;    _DEV_MC[1].actuator_torque_limit = 4.5*2;      _DEV_MC[1].data_to_radian = tic2radL;   //53.42
+  _DEV_MC[2].actuator_direction =  1;    _DEV_MC[2].actuator_gear_ratio = 8;  _DEV_MC[2].joint_initial_position = (180-15.19)/180*PI;     _DEV_MC[2].torque_to_data = 200;    _DEV_MC[2].actuator_torque_limit = 4.5*2;      _DEV_MC[2].data_to_radian = tic2radL;
 }
 
 void Motor_Controller::EnableMotor(){
@@ -71,8 +71,14 @@ VectorXd Motor_Controller::GetThetaDotSMAF(){
   VectorXd a_th_dot(4); a_th_dot = _WRIST_MC.GetThetaDotEstimated(); for(uint8_t i=0; i<4; i++) th_dot[i+3] = a_th_dot[i];   // Get from wrist motors: Dynamixel from estimated
   // th_dot[0] = th_dot[0] / 6; // Because V2 motor driver
 
-  sma << sma.block<window_size-1, 7>(1, 0), th_dot[0], th_dot[1], th_dot[2], th_dot[3], th_dot[4], th_dot[5], th_dot[6];
-  th_dot_sma_filtered = sma.colwise().mean();
+  // sma << sma.block<window_size-1, 7>(1, 0), th_dot[0], th_dot[1], th_dot[2], th_dot[3], th_dot[4], th_dot[5], th_dot[6];
+  sma_rmd << sma_rmd.block<window_size_rmd-1, 3>(1, 0), th_dot[0], th_dot[1], th_dot[2];
+  sma_dym << sma_dym.block<window_size_dym-1, 4>(1, 0), th_dot[3], th_dot[4], th_dot[5], th_dot[6];
+  // th_dot_sma_filtered = sma.colwise().mean();
+  th_dot_sma_filtered_rmd = sma_rmd.colwise().mean();
+  th_dot_sma_filtered_dym = sma_dym.colwise().mean();
+
+  th_dot_sma_filtered << th_dot_sma_filtered_rmd, th_dot_sma_filtered_dym;
 
   return th_dot_sma_filtered;
 }

@@ -89,13 +89,30 @@ namespace gazebo
 
     sub_rbq3_motion_switch = node_handle.subscribe("rbq3/motion_switch", 100, &gazebo::STArmPlugin::SwitchModeRBQ3, this);
 
-    pub_ee_pose = node_handle.advertise<geometry_msgs::TransformStamped>("st_arm/ee_pose", 10);
+    pub_ee_pose = node_handle.advertise<geometry_msgs::TransformStamped>("st_arm/ee_pose__noting_here", 10);
     pub_ref_ee_pose = node_handle.advertise<geometry_msgs::TransformStamped>("st_arm/ref_ee_pose", 10);
   
     pub_rbq3_joint_state = node_handle.advertise<sensor_msgs::JointState>("rbq3/joint_states", 200);
     pub_weight_est_pose_difference = node_handle.advertise<std_msgs::Float32MultiArray>("st_arm/pose_difference", 100);
     pub_weight_est_estimated_obj_weight = node_handle.advertise<std_msgs::Float32>("st_arm/estimated_obj_weight", 100);
     sub_weight_est_start_estimation = node_handle.subscribe("unity/calibrate_obj_weight", 100, &gazebo::STArmPlugin::SwitchOnAddingEstimatedObjWeightToRBDL, this);
+
+    //virtual spring torque : tau_vs
+    pub_virtual_spring_torque_0 = node_handle.advertise<std_msgs::Float32>("vs_torque_JOINT0", 10);
+    pub_virtual_spring_torque_1 = node_handle.advertise<std_msgs::Float32>("vs_torque_JOINT1", 10);
+    pub_virtual_spring_torque_2 = node_handle.advertise<std_msgs::Float32>("vs_torque_JOINT2", 10);
+
+    //limited torque
+    pub_limited_torque_2 = node_handle.advertise<std_msgs::Float32>("limited_torque_JOINT2", 10);
+
+    //EE eulerangle
+    pub_ee_pi = node_handle.advertise<std_msgs::Float32>("ee_pi", 100);
+    pub_ee_theta = node_handle.advertise<std_msgs::Float32>("ee_theta", 100);
+    pub_ee_psi = node_handle.advertise<std_msgs::Float32>("ee_psi", 100);
+
+    //Pose
+    pub_EE_pose = node_handle.advertise<geometry_msgs::Pose>("st_arm/EE_pose", 100);
+
   }
 
 
@@ -269,8 +286,8 @@ namespace gazebo
     arm_rbdl.x_desired_dot_last = RBDLVectorNd::Zero(6);
     arm_rbdl.x_desired = RBDLVectorNd::Zero(6);
     arm_rbdl.x_desired_last = RBDLVectorNd::Zero(6);
-    arm_rbdl.error = RBDLVectorNd::Zero(6);
-    arm_rbdl.error_dot = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_error = RBDLVectorNd::Zero(6);
+    arm_rbdl.x_error_dot = RBDLVectorNd::Zero(6);
 
     arm_rbdl.jacobian = RBDLMatrixNd::Zero(6,6);
     arm_rbdl.jacobian_prev = RBDLMatrixNd::Zero(6,6);
@@ -290,13 +307,20 @@ namespace gazebo
     arm_rbdl.ts_p = RBDLMatrixNd::Zero(6,6);
     arm_rbdl.ts_v = RBDLMatrixNd::Zero(6,6);
 
-    arm_rbdl.rotation_ee = RBDLMatrix3d::Zero(3,3);
-    arm_rbdl.rotation_ee_transpose = RBDLMatrix3d::Zero(3,3);
+    arm_rbdl.ee_ori_act = RBDLMatrix3d::Zero(3,3);
+    arm_rbdl.ee_ori_act_trans = RBDLMatrix3d::Zero(3,3);
     
-    arm_rbdl.position_ee = RBDLVector3d::Zero(3);
+    arm_rbdl.ee_pos_act = RBDLVector3d::Zero(3);
     arm_rbdl.position_desired = RBDLVector3d::Zero(3);
     arm_rbdl.rpy_ee = RBDLVector3d::Zero(3);
     arm_rbdl.rpy_desired = RBDLVector3d::Zero(3);
+
+    W_term << 0.0981,    0,    0, 0,      0,     0,
+                   0, 0.25,    0, 0,      0,     0,
+                   0,    0, 0.25, 0,      0,     0,
+                   0,    0,    0, 0,      0,     0,
+                   0,    0,    0, 0, 0.1045,     0,
+                   0,    0,    0, 0,      0, 0.135;
 
     std::cout << "RBDL Initialize function success" << std::endl;
   }
@@ -471,6 +495,42 @@ namespace gazebo
     std_msgs::Float32 weight_est_estimated_object_weight_msg;
     weight_est_estimated_object_weight_msg.data = estimated_object_weight;
     pub_weight_est_estimated_obj_weight.publish(weight_est_estimated_object_weight_msg);
+
+    //e.e position msg checking
+    geometry_msgs::Pose ee_pose_msg;
+    ee_pose_msg.position.x = (float)(ee_position[0]);
+    ee_pose_msg.position.y = (float)(ee_position[1]);
+    ee_pose_msg.position.z = (float)(ee_position[2]);
+    ee_pose_msg.orientation.x  = (float)(arm_rbdl.rpy_ee[0]);
+    ee_pose_msg.orientation.y  = (float)(arm_rbdl.rpy_ee[1]);
+    ee_pose_msg.orientation.z  = (float)(arm_rbdl.rpy_ee[2]);
+    pub_EE_pose.publish(ee_pose_msg);
+
+
+    //virtual spring torque
+    msg_virtual_spring_torque_0.data = tau_vs[0];
+    pub_virtual_spring_torque_0.publish(msg_virtual_spring_torque_0);
+    msg_virtual_spring_torque_1.data = tau_vs[1];
+    pub_virtual_spring_torque_1.publish(msg_virtual_spring_torque_1);
+    msg_virtual_spring_torque_2.data = tau_vs[2];
+    pub_virtual_spring_torque_2.publish(msg_virtual_spring_torque_2);
+
+    //limited torque
+    msg_limited_torque_2.data = tau_limit[2];
+    pub_limited_torque_2.publish(msg_limited_torque_2);
+
+
+    //actual EE eulerangle
+    msg_ee_pi.data = psi;
+    pub_ee_pi.publish(msg_ee_psi);
+    msg_ee_theta.data = theta;
+    pub_ee_theta.publish(msg_ee_theta);
+    msg_ee_psi.data = pi;
+    pub_ee_psi.publish(msg_ee_pi);
+
+
+
+
   }
 
 
@@ -484,6 +544,8 @@ namespace gazebo
     else if (control_mode == Motion_5) Motion5();
     else if (control_mode == Motion_6) Motion6();
     else if (control_mode == Motion_7) Motion7();
+    else if (control_mode == Motion_8) Motion8();
+    else if (control_mode == Motion_9) Motion9();
     else Idle();
   }
 
@@ -511,7 +573,9 @@ namespace gazebo
     else if (msg -> data == 4) control_mode = Motion_4; 
     else if (msg -> data == 5) control_mode = Motion_5;   
     else if (msg -> data == 6) control_mode = Motion_6;   
-    else if (msg -> data == 7) control_mode = Motion_7;   
+    else if (msg -> data == 7) control_mode = Motion_7;
+    else if (msg -> data == 8) control_mode = Motion_8;
+    else if (msg -> data == 9) control_mode = Motion_9;
     else                       control_mode = IDLE;    
   }
 
@@ -560,10 +624,6 @@ namespace gazebo
   // Task Space PD Control ||	Infinity Drawer || Gravity Compensation
   void STArmPlugin::Motion1()
   { 
-    // gain_p << 2000, 200, 200;
-    // gain_w << 10, 10, 10;
-    // gain_r << 1, 1, 1, 1, 1, 1; //adjust GC intensity
-
     step_time = 3;
     
     cnt_time = cnt*inner_dt;   
@@ -572,9 +632,15 @@ namespace gazebo
     gain_w = gain_w_task_space; 
     gain_r << 1, 1, 1, 1, 1, 1; //adjust GC intensity
 
-    threshold << 0.2, 0.1, 0.1, 0.1, 0.1, 0.1; 
-    joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
-                    -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
+
+    threshold << deg, deg, deg, deg, deg, deg;
+    joint_limit <<   (180/180)*PI,   (180/180)*PI,  (150/180)*PI,  1.57,  1.57,  1.57, 
+                    (-180/180)*PI,           -PI,  (90/180)*PI, -1.57, -1.57, -1.57;
+    // joint_limit <<   (180/180)*PI,   (35/180)*PI,  (164.8/180)*PI,  1.57,  1.57,  1.57, 
+    //                 (-135/180)*PI,           -PI,      (5/180)*PI, -1.57, -1.57, -1.57;
+    // threshold << 0.2, 0.1, 0.1, 0.1, 0.1, 0.1; 
+    // joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
+    //                 -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
 
     A0 << 1, 0, 0, 0,
           0, 1, 0, 0,
@@ -603,7 +669,7 @@ namespace gazebo
     A6 << -sin(th[5]), -cos(th[5]), 0, -L6*sin(th[5]),
           cos(th[5]), -sin(th[5]), 0, L6*cos(th[5]),
           0, 0, 1, 0, 
-          0, 0, 0, 1;          
+          0, 0, 0, 1;
           
     T00 = A0;
     T01 = T00*A1;
@@ -661,6 +727,13 @@ namespace gazebo
     ee_rotation_y = ee_rotation.block<3,1>(0,1); 
     ee_rotation_z = ee_rotation.block<3,1>(0,2);
 
+    //for MSG Publisher
+    // arm_rbdl.rpy_ee = ee_rotation.eulerAngles(2,1,0);
+    // Get the Euler Angle z-y-x rotation matrix
+    pi = atan2(ee_rotation(1,0),ee_rotation(0,0));
+    theta = atan2(- ee_rotation(2,0), cos(pi)*ee_rotation(0,0) + sin(pi)*ee_rotation(1,0));
+    psi = atan2(sin(pi)*ee_rotation(0,2) - cos(pi)*ee_rotation(1,2), -sin(pi)*ee_rotation(0,1) + cos(pi)*ee_rotation(1,1));
+
     ref_ee_rotation = ref_ee_quaternion.normalized().toRotationMatrix();    
 
     ref_ee_rotation_x = ref_ee_rotation.block<3,1>(0,0); 
@@ -670,62 +743,223 @@ namespace gazebo
     ee_momentum << gain_w(0) * ee_orientation_error(0), gain_w(1) * ee_orientation_error(1), gain_w(2) * ee_orientation_error(2);
 
     virtual_spring << ee_force(0), ee_force(1), ee_force(2), ee_momentum(0), ee_momentum(1), ee_momentum(2);
-  
+
+    tau_vs = Jacobian.transpose() * virtual_spring;
+    
     RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
+
     for(uint8_t i = 0; i < 6; i++)
-    {
-      tau_rbdl(i) = arm_rbdl.tau_nonlinear(i);
+    { 
+      tau_gravity_compensation(i) = gain_r(i)*arm_rbdl.tau_nonlinear(i);
     }
 
-    tau = Jacobian.transpose() * virtual_spring;
-
-    for(uint8_t i=0; i<6; i++) 
+    for(uint8_t i=0; i<6; i++)
     {
-      tau_viscous_damping[i] = gain_d_joint_space[i] * th_dot[i]; 
-      tau_gravity_compensation[i] = tau_rbdl[i] * gain_r[i];
-    }
-
-    for(uint8_t i=0; i<6; i++){
-      if(th(i) > joint_limit(0,i) - threshold(i) && tau(i) > 0 || th(i) < joint_limit(1,i) + threshold(i) && tau(i) < 0)
+      if((abs(joint_limit(0,i)-th(i)) <= threshold(i)) && (tau_vs(i) > 0))
       {
-        joint_torque[i] = tau_gravity_compensation[i] - tau_viscous_damping[i];
+        // joint_torque(i) = (abs(joint_limit(0,i)-th(i)))/threshold(i)*tau(i);
+        std::cout << "limit_1" << std::endl;
+        tau_limit(i) = (1 - cos(PI * abs(joint_limit(0,i)-th(i)) / threshold(i))) / 2 * tau_vs(i);
+        joint_torque(i) = tau_limit(i) + tau_gravity_compensation(i);
       }
       else
       {
-        joint_torque[i] = tau_gravity_compensation[i] - tau_viscous_damping[i] + tau[i]; 
-      } 
+        joint_torque(i) = tau_vs(i) + tau_gravity_compensation(i);
+      }
+
+      if((abs(joint_limit(1,i)+th(i)) <= threshold(i)) && (tau_vs(i) < 0))
+      {
+        // joint_torque(i) = (abs(joint_limit(1,i)-th(i)))/threshold(i)*tau(i);
+        std::cout << "limit_2" << std::endl;
+        tau_limit(i) = (1 - cos(PI * abs(joint_limit(1,i)-th(i)) / threshold(i))) / 2 * tau_vs(i);
+        joint_torque(i) = tau_limit(i) + tau_gravity_compensation(i);
+      }
+      else
+      {
+        joint_torque(i) = tau_vs(i) + tau_gravity_compensation(i);
+      }
     }
+
+
 
     cnt++;
 
-    // InverseSolverUsingSRJacobian(ref_ee_position, ref_ee_rotation);
-    InverseSolverUsingJacobian(ref_ee_position, ref_ee_rotation);
+    // InverseSolverUsingJacobian(ref_ee_position, ref_ee_rotation);
   }
 
-  //	RBDL
+  // Task Space PD Control || anoter trajectory
   void STArmPlugin::Motion2()
   {
+    step_time = 3;
+    
+    cnt_time = cnt*inner_dt;   
+
+    gain_p = gain_p_task_space;
+    gain_w = gain_w_task_space; 
+    gain_r << 1, 1, 1, 1, 1, 1; //adjust GC intensity
+
+
+    threshold << deg, deg, deg, deg, deg, deg;
+    joint_limit <<   (180/180)*PI,   (180/180)*PI,  (150/180)*PI,  1.57,  1.57,  1.57, 
+                    (-180/180)*PI,           -PI,  (90/180)*PI, -1.57, -1.57, -1.57;
+    // joint_limit <<   (180/180)*PI,   (35/180)*PI,  (164.8/180)*PI,  1.57,  1.57,  1.57, 
+    //                 (-135/180)*PI,           -PI,      (5/180)*PI, -1.57, -1.57, -1.57;
+    // threshold << 0.2, 0.1, 0.1, 0.1, 0.1, 0.1; 
+    // joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
+    //                 -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
+
+    A0 << 1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1;
+    A1 << cos(th[0]), 0, -sin(th[0]), 0,
+          sin(th[0]), 0, cos(th[0]), 0,
+          0, -1, 0, L1,
+          0, 0, 0, 1;
+    A2 << cos(th[1]), -sin(th[1]), 0, L2*cos(th[1]),
+          sin(th[1]), cos(th[1]), 0, L2*sin(th[1]),
+          0, 0, 1, 0, 
+          0, 0, 0, 1;
+    A3 << cos(th[2]), -sin(th[2]), 0, L3*cos(th[2]), 
+          sin(th[2]), cos(th[2]), 0, L3*sin(th[2]), 
+          0, 0, 1, 0,
+          0, 0, 0, 1;
+    A4 << sin(th[3]), 0, cos(th[3]), 0,
+          -cos(th[3]), 0, sin(th[3]), 0,
+          0, -1, 0, 0,
+          0, 0, 0, 1;
+    A5 << -sin(th[4]), 0, cos(th[4]), 0,
+          cos(th[4]), 0, sin(th[4]), 0,
+          0, 1, 0, L5,
+          0, 0, 0, 1;
+    A6 << -sin(th[5]), -cos(th[5]), 0, -L6*sin(th[5]),
+          cos(th[5]), -sin(th[5]), 0, L6*cos(th[5]),
+          0, 0, 1, 0, 
+          0, 0, 0, 1;
+          
+    T00 = A0;
+    T01 = T00*A1;
+    T02 = T01*A2;
+    T03 = T02*A3;
+    T04 = T03*A4;
+    T05 = T04*A5;
+    T06 = T05*A6;
+  
+    a0 << T00(0,2), T00(1,2), T00(2,2);
+    a1 << T01(0,2), T01(1,2), T01(2,2);
+    a2 << T02(0,2), T02(1,2), T02(2,2);
+    a3 << T03(0,2), T03(1,2), T03(2,2);
+    a4 << T04(0,2), T04(1,2), T04(2,2);
+    a5 << T05(0,2), T05(1,2), T05(2,2);
+
+    P6_P0 << T06(0,3)-T00(0,3), T06(1,3)-T00(1,3), T06(2,3)-T00(2,3);
+    P6_P1 << T06(0,3)-T01(0,3), T06(1,3)-T01(1,3), T06(2,3)-T01(2,3);
+    P6_P2 << T06(0,3)-T02(0,3), T06(1,3)-T02(1,3), T06(2,3)-T02(2,3);
+    P6_P3 << T06(0,3)-T03(0,3), T06(1,3)-T03(1,3), T06(2,3)-T03(2,3);
+    P6_P4 << T06(0,3)-T04(0,3), T06(1,3)-T04(1,3), T06(2,3)-T04(2,3);
+    P6_P5 << T06(0,3)-T05(0,3), T06(1,3)-T05(1,3), T06(2,3)-T05(2,3);
+
+    J1 << a0.cross(P6_P0), a0;
+    J2 << a1.cross(P6_P1), a1;
+    J3 << a2.cross(P6_P2), a2;
+    J4 << a3.cross(P6_P3), a3;
+    J5 << a4.cross(P6_P4), a4;
+    J6 << a5.cross(P6_P5), a5;
+
+    Jacobian << J1, J2, J3, J4, J5, J6;
+
+    ee_position << T06(0,3), T06(1,3), T06(2,3);
+    
+    // if (cnt<1) initial_ee_position << ee_position(0), ee_position(1), ee_position(2);
+    if (cnt<1) initial_ee_position << 0.4, 0, 0.3;
+
+    if(cnt_time <= step_time*100)
+    { 
+      ref_ee_position(0) = initial_ee_position(0) - 0.1*0.5*(-1+cos(PI*(cnt_time/step_time)));
+      ref_ee_position(1) = initial_ee_position(1)*(sin(0.5*PI*(cnt_time/step_time)));
+      ref_ee_position(2) = initial_ee_position(2);
+      ref_ee_quaternion.w() = 1;
+      ref_ee_quaternion.x() = 0;
+      ref_ee_quaternion.y() = 0;
+      ref_ee_quaternion.z() = 0;
+    }
+
+    ee_force(0) = gain_p(0) * (ref_ee_position(0) - ee_position(0));
+    ee_force(1) = gain_p(1) * (ref_ee_position(1) - ee_position(1));
+    ee_force(2) = gain_p(2) * (ref_ee_position(2) - ee_position(2));
+
+    ee_rotation = T06.block<3,3>(0,0);
+    ee_rotation_x = ee_rotation.block<3,1>(0,0); 
+    ee_rotation_y = ee_rotation.block<3,1>(0,1); 
+    ee_rotation_z = ee_rotation.block<3,1>(0,2);
+
+    //for MSG Publisher
+    arm_rbdl.rpy_ee = ee_rotation.eulerAngles(2,1,0);
+
+    ref_ee_rotation = ref_ee_quaternion.normalized().toRotationMatrix();    
+
+    ref_ee_rotation_x = ref_ee_rotation.block<3,1>(0,0); 
+    ref_ee_rotation_y = ref_ee_rotation.block<3,1>(0,1); 
+    ref_ee_rotation_z = ref_ee_rotation.block<3,1>(0,2);
+    ee_orientation_error = ee_rotation_x.cross(ref_ee_rotation_x) + ee_rotation_y.cross(ref_ee_rotation_y) + ee_rotation_z.cross(ref_ee_rotation_z);
+    ee_momentum << gain_w(0) * ee_orientation_error(0), gain_w(1) * ee_orientation_error(1), gain_w(2) * ee_orientation_error(2);
+
+    virtual_spring << ee_force(0), ee_force(1), ee_force(2), ee_momentum(0), ee_momentum(1), ee_momentum(2);
+
+    tau_vs = Jacobian.transpose() * virtual_spring;
+    
     RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
+
     for(uint8_t i = 0; i < 6; i++)
-    {
-      tau_rbdl(i) = arm_rbdl.tau_nonlinear(i);
+    { 
+      tau_gravity_compensation(i) = gain_r(i)*arm_rbdl.tau_nonlinear(i);
     }
-    for(uint8_t i = 0; i < 6; i++)
+
+    for(uint8_t i=0; i<6; i++)
     {
-      joint_torque(i) = tau_rbdl(i);
+
+      if (th(i) > joint_limit(0, i) - threshold(i) && tau(i) > 0 || th(i) < joint_limit(1, i) + threshold(i) && tau(i) < 0)
+        joint_torque(i) = tau_gravity_compensation(i);
+      else
+        joint_torque(i) = tau_vs(i) + tau_gravity_compensation(i);
     }
+
+    cnt++;
   }
 
   //	HMD Virtual Box follower
   void STArmPlugin::Motion3()
   {
-    gain_p << 100, 100, 100;
+    std::cout << "Checked motion3" << std::endl;
+
+    unit_6 << 1, 0, 0, 0, 0, 0,
+              0, 1, 0, 0, 0, 0,
+              0, 0, 1, 0, 0, 0,
+              0, 0, 0, 1, 0, 0,
+              0, 0, 0, 0, 1, 0,
+              0, 0, 0, 0, 0, 1;
+
+    gain_p = gain_p_task_space;
+    gain_w = gain_w_task_space; 
+    gain_r << 1, 1, 1, 1, 1, 1; //adjust GC intensity
+
+    // gain_p << 100, 100, 100;
     gain_d << 5, 5, 5;
-    gain_w << 10, 10, 10;
-    threshold << 0.2, 0.2, 0.2, 0.2, 0.2, 0.2; // limit threshold angle
+    // gain_w << 10, 10, 10;
+
+    // threshold << deg, deg, deg, deg, deg, deg;  // threshold : 문지반, 입구, 한계치
+    // joint_limit <<   (180/180)*PI,   (35/180)*PI,  (164.8/180)*PI,  1.57,  1.57,  1.57, 
+    //                 (-135/180)*PI,           -PI,      (5/180)*PI, -1.57, -1.57, -1.57;
+
+    threshold << 0.2, 0.1, 0.1, 0.1, 0.1, 0.1; // limit threshold angle
     joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
                   -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
+                  
     gain_r << 1, 0.3, 0.5, 0.5, 0.5, 0.5; // affects joint limit control
+
+    // threshold << 0.2, 0.1, 0.1, 0.1, 0.1, 0.1; 
+    // joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
+    //                 -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
     
     cnt_time = cnt * dt;   
 
@@ -797,6 +1031,10 @@ namespace gazebo
     ref_ee_position = hmd_position;
     ref_ee_rotation = hmd_quaternion.normalized().toRotationMatrix();
 
+    ee_position_error(0) = ref_ee_position(0) - ee_position(0);
+    ee_position_error(1) = ref_ee_position(1) - ee_position(1);
+    ee_position_error(2) = ref_ee_position(2) - ee_position(2);
+
     ee_force(0) = gain_p(0) * (ref_ee_position(0) - ee_position(0)) - gain_d(0) * ee_velocity(0);
     ee_force(1) = gain_p(1) * (ref_ee_position(1) - ee_position(1)) - gain_d(1) * ee_velocity(1);
     ee_force(2) = gain_p(2) * (ref_ee_position(2) - ee_position(2)) - gain_d(2) * ee_velocity(2);
@@ -805,7 +1043,6 @@ namespace gazebo
     ee_rotation_x = ee_rotation.block<3,1>(0,0); 
     ee_rotation_y = ee_rotation.block<3,1>(0,1); 
     ee_rotation_z = ee_rotation.block<3,1>(0,2);
-
 
 
     ref_ee_rotation_x = ref_ee_rotation.block<3,1>(0,0); 
@@ -822,7 +1059,22 @@ namespace gazebo
 
     virtual_spring << ee_force(0), ee_force(1), ee_force(2), ee_momentum(0), ee_momentum(1), ee_momentum(2);
 
-    tau =  Jacobian.transpose() * virtual_spring;
+
+    // experiment //
+    estimation_error << ee_position_error, ee_orientation_error;
+
+    // Error Damped Pseudo inverse(E-DPI)
+    Jacobian_tp = Jacobian.transpose();
+    estimation_error_innerproduct = 1/2 * estimation_error.dot(estimation_error);
+    J_for_dpi = Jacobian*Jacobian_tp + estimation_error_innerproduct*unit_6 + W_term*0.001;
+    // J_for_dpi = Jacobian*Jacobian_tp + W_term*0.001;
+    J_inverse_for_dpi = J_for_dpi.inverse();
+    Jacobian_e_dpi = Jacobian_tp*J_inverse_for_dpi;
+
+
+    tau = Jacobian_e_dpi * virtual_spring;
+    //////////
+    // tau =  Jacobian.transpose() * virtual_spring;
 
     SetRBDLVariables();
 
@@ -835,11 +1087,43 @@ namespace gazebo
 
     for(uint8_t i=0; i<6; i++)
     {
-      if(th(i)>joint_limit(0,i)-threshold(i) && tau(i)>0 || th(i)<joint_limit(1,i)+threshold(i) && tau(i)<0)
-        joint_torque(i) = gain_r(i)*tau_gravity_compensation(i);
-      else
+      // if(th(i)>joint_limit(0,i)-threshold(i) && tau(i)>0 || th(i)<joint_limit(1,i)+threshold(i) && tau(i)<0)
+      //   joint_torque(i) = gain_r(i)*tau_gravity_compensation(i);
+      // else
         joint_torque(i) = tau(i) + gain_r(i)*tau_gravity_compensation(i); 
     }
+
+
+    // tau_vs = Jacobian.transpose() * virtual_spring;
+
+    // RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL);
+    // // RBDL::InverseDynamics(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.q_d_dot, arm_rbdl.tau, NULL);
+
+    // for(uint8_t i = 0; i < 6; i++)
+    // { 
+    //   tau_gravity_compensation(i) = gain_r(i)*arm_rbdl.tau_nonlinear(i);
+    //   tau(i) =  tau_vs(i) + tau_gravity_compensation(i);
+    // }
+
+    
+
+    // for(uint8_t i=0; i<6; i++)
+    // {
+    //   if((abs(joint_limit(0,i)-th(i)) <= threshold(i)) && (tau(i) > 0))
+    //   {
+    //     // joint_torque(i) = (abs(joint_limit(0,i)-th(i)))/threshold(i)*tau(i);
+    //     joint_torque(i) = (1 - cos(PI * abs(joint_limit(0,i)-th(i)) / threshold(i))) / 2 * tau_vs(i) + tau_gravity_compensation(i);
+    //   }
+    //   else if((abs(joint_limit(1,i)-th(i)) <= threshold(i)) && (tau(i) < 0))
+    //   {
+    //     // joint_torque(i) = (abs(joint_limit(1,i)-th(i)))/threshold(i)*tau(i);
+    //     joint_torque(i) = (1 - cos(PI * abs(joint_limit(1,i)-th(i)) / threshold(i))) / 2 * tau_vs(i) + tau_gravity_compensation(i);
+    //   }
+    //   else
+    //   {
+    //     joint_torque(i) = tau(i);
+    //   }
+    // }
 
     cnt++;
   }
@@ -857,6 +1141,17 @@ namespace gazebo
     joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
                     -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
 
+    //for MSG Publisher
+    arm_rbdl.ee_pos_act = RBDL::CalcBodyToBaseCoordinates(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), true);  //Position 
+    arm_rbdl.ee_ori_act = RBDL::CalcBodyWorldOrientation(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, true);  //Orientation
+    ee_position = arm_rbdl.ee_pos_act;
+    arm_rbdl.ee_ori_act_trans = arm_rbdl.ee_ori_act;//.transpose();
+
+    // Get the Euler Angle z-y-x rotation matrix
+    pi = atan2(arm_rbdl.ee_ori_act_trans(1,0),arm_rbdl.ee_ori_act_trans(0,0));
+    theta = atan2(- arm_rbdl.ee_ori_act_trans(2,0), cos(pi)*arm_rbdl.ee_ori_act_trans(0,0) + sin(pi)*arm_rbdl.ee_ori_act_trans(1,0));
+    psi = atan2(sin(pi)*arm_rbdl.ee_ori_act_trans(0,2) - cos(pi)*arm_rbdl.ee_ori_act_trans(1,2), -sin(pi)*arm_rbdl.ee_ori_act_trans(0,1) + cos(pi)*arm_rbdl.ee_ori_act_trans(1,1));
+
     if (cnt<1) initial_ee_position << 0.4, 0, 0.3;
 
     if(cnt_time <= step_time*100)
@@ -869,6 +1164,7 @@ namespace gazebo
       ref_ee_quaternion.y() = 0;
       ref_ee_quaternion.z() = 0;
     }
+    ref_ee_rotation = ref_ee_quaternion.normalized().toRotationMatrix();  
 
     InverseSolverUsingJacobian(ref_ee_position, ref_ee_rotation);
 
@@ -989,11 +1285,11 @@ namespace gazebo
     // tau_gravity_compensation[5] = 0.14068*cos(th[5] + 1.5708)*(1.0*sin(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) - cos(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2]))) + 0.14068*cos(th[4] + 1.5708)*sin(th[5] + 1.5708)*(cos(th[3] - 1.5708)*(cos(th[1])*sin(th[2]) + cos(th[2])*sin(th[1])) + sin(th[3] - 1.5708)*(cos(th[1])*cos(th[2]) - 1.0*sin(th[1])*sin(th[2])));
 
     //---updated accurate com---
-    shoulder_link_com << 0.092/L1*T01(0,3), 0.092/L1*T01(1,3), 0.092/L1*T01(2,3);
-    arm_link_com << T01(0,3)+0.04/L2*T12(0,3), T01(1,3)+0.04/L2*T12(1,3), T01(2,3)+0.04/L2*T12(2,3);
-    elbow_link_com << T02(0,3)+0.13/L3*T23(0,3), T02(1,3)+0.13/L3*T23(1,3), T02(2,3)+0.13/L3*T23(2,3);
-    forearm_link_com << T04(0,3)+0.046/L5*T45(0,3), T04(1,3)+0.046/L5*T45(1,3), T04(2,3)+0.046/L5*T45(2,3);
-    wrist_link_com << T04(0,3)+0.095/L5*T45(0,3), T04(1,3)+0.095/L5*T45(1,3), T04(2,3)+0.095/L5*T45(2,3);
+    shoulder_link_com << joint0_to_L1_com/L1*T01(0,3), joint0_to_L1_com/L1*T01(1,3), joint0_to_L1_com/L1*T01(2,3);
+    arm_link_com << T01(0,3)+joint1_to_L2_com/L2*T12(0,3), T01(1,3)+joint1_to_L2_com/L2*T12(1,3), T01(2,3)+joint1_to_L2_com/L2*T12(2,3);
+    elbow_link_com << T02(0,3)+joint2_to_L3_com/L3*T23(0,3), T02(1,3)+joint2_to_L3_com/L3*T23(1,3), T02(2,3)+joint2_to_L3_com/L3*T23(2,3);
+    forearm_link_com << T04(0,3)+joint3_to_L4_com/L5*T45(0,3), T04(1,3)+joint3_to_L4_com/L5*T45(1,3), T04(2,3)+joint3_to_L4_com/L5*T45(2,3);
+    wrist_link_com << T04(0,3)+joint4_to_L5_com/L5*T45(0,3), T04(1,3)+joint4_to_L5_com/L5*T45(1,3), T04(2,3)+joint4_to_L5_com/L5*T45(2,3);
     endeffector_link_com << T06(0,3), T06(1,3), T06(2,3);
 
     manipulator_com <<  (m_Link1*shoulder_link_com(0) + m_Link2*arm_link_com(0) + m_Link3*elbow_link_com(0) + m_Link4*forearm_link_com(0) + m_Link5*wrist_link_com(0) + m_Link6*endeffector_link_com(0)) / m_Arm,
@@ -1243,12 +1539,93 @@ namespace gazebo
   void STArmPlugin::Motion7()
   {
     dt = 0.001;
+    temp_gain_p << 100, 100, 100, 50, 50, 50;
+    temp_gain_v << 80, 80, 80, 40, 40, 40;
+
+
+    threshold << 0.2, 0.2, 0.2, 0.2, 0.2, 0.2; // limit threshold angle
+    joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
+                  -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
+    // gain_r << 1, 0.3, 0.5, 0.5, 0.5, 0.5; // affects joint limit control
+    gain_r << 1, 1, 1, 1, 1, 1; // affects joint limit control
+    
+    // cnt_time = cnt * dt; 
+    double pi_ref = 0, theta_ref = 0, psi_ref = 0;
+
+    if (cnt <= 1) initial_ee_position << 0.4, 0, 0.3;
+
+    SetRBDLVariables();
+
+    Calc_Feedback_Pose(arm_rbdl);
+
+    //for infinity Trajectory
+    step_time = 3;
+    cnt_time = cnt * dt; 
+
+    if(cnt_time <= step_time*100)
+    { 
+      ref_ee_position(0) = initial_ee_position(0)- 0.2*abs(sin(PI/2*(cnt_time/step_time)));
+      ref_ee_position(1) = initial_ee_position(1)- 0.3*sin(PI/2*(cnt_time/step_time));
+      ref_ee_position(2) = initial_ee_position(2)+ 0.2*sin(PI*(cnt_time/step_time));
+      ref_ee_quaternion.w() = 1;
+      ref_ee_quaternion.x() = 0;
+      ref_ee_quaternion.y() = 0;
+      ref_ee_quaternion.z() = 0;
+    }
+    ref_ee_rotation = ref_ee_quaternion.normalized().toRotationMatrix();
+
+    // arm_rbdl.rpy_desired = ref_ee_rotation.eulerAngles(2,1,2);
+    // pi_ref = arm_rbdl.rpy_desired(0);
+    // theta_ref = arm_rbdl.rpy_desired(1);
+    // psi_ref = arm_rbdl.rpy_desired(2);
+
+    // z-y-x
+    pi_ref = atan2(ref_ee_rotation(1,0),ref_ee_rotation(0,0));
+    theta_ref = atan2(-ref_ee_rotation(2,0), cos(pi_ref)*ref_ee_rotation(0,0) + sin(pi_ref)*ref_ee_rotation(1,0));
+    psi_ref = atan2(sin(pi_ref)*ref_ee_rotation(0,2) - cos(pi_ref)*ref_ee_rotation(1,2), -sin(pi_ref)*ref_ee_rotation(0,1) + cos(pi_ref)*ref_ee_rotation(1,1));
+    
+    arm_rbdl.x_desired << ref_ee_position, psi_ref, theta_ref, pi_ref;
+    arm_rbdl.x_desired_dot = (arm_rbdl.x_desired - arm_rbdl.x_desired_last) / dt;
+    arm_rbdl.x_desired_last = arm_rbdl.x_desired;
+    arm_rbdl.x_desired_d_dot = (arm_rbdl.x_desired_dot - arm_rbdl.x_desired_dot_last) / dt;
+    arm_rbdl.x_desired_dot_last = arm_rbdl.x_desired_dot; 
+
+    for(int i = 0; i < 6; i++)
+    {
+      arm_rbdl.x_ctc_d_dot(i) = arm_rbdl.x_desired_d_dot(i) + temp_gain_p(i)*(arm_rbdl.x_desired(i) - arm_rbdl.x_actual(i)) + temp_gain_v(i)*(arm_rbdl.x_desired_dot(i) - arm_rbdl.x_actual_dot(i));
+    }
+
+
+    arm_rbdl.q_d_dot_ctc = arm_rbdl.jacobian_ana_inverse * (arm_rbdl.x_ctc_d_dot - arm_rbdl.jacobian_ana_dot * arm_rbdl.q_dot);
+
+
+    RBDL::NonlinearEffects(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.q_dot, arm_rbdl.tau_nonlinear, NULL); // Nonlinear 토크 생성
+
+    arm_rbdl.inertia_matrix = RBDLMatrixNd::Zero(6,6);// inertia Matrix 0 초기화
+    RBDL::CompositeRigidBodyAlgorithm(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.inertia_matrix, true); // inertia Matrix 생성
+    arm_rbdl.tau_inertia = arm_rbdl.inertia_matrix * arm_rbdl.q_d_dot_ctc;// inertia 토크 생성
+
+    for(uint8_t i=0; i<6; i++)
+    {
+      // if(th(i)>joint_limit(0,i)-threshold(i) && tau(i)>0 || th(i)<joint_limit(1,i)+threshold(i) && tau(i)<0)
+      //   joint_torque(i) = gain_r(i)*tau_gravity_compensation(i);
+      // else
+        joint_torque(i) = arm_rbdl.tau_inertia(i) + gain_r(i)*arm_rbdl.tau_nonlinear(i);  //CTC 토크
+    }
+
+    cnt++;
+  }
+
+  // ctc2
+  void STArmPlugin::Motion8()
+  { 
+    dt = 0.001;
     VectorXd temp_gain_p(6);
-    // temp_gain_p << 1, 1, 1, 1, 1, 1;
-    temp_gain_p << 1, 1, 1, 0, 0, 0;
+    temp_gain_p << 1, 1, 1, 1, 1, 1;
+    // temp_gain_p << 1, 1, 1, 0, 0, 0;
     VectorXd temp_gain_v(6);
-    // temp_gain_v << 1, 1, 1, 1, 1, 1;
-    temp_gain_v << 1, 1, 1, 0, 0, 0;
+    temp_gain_v << 1, 1, 1, 1, 1, 1;
+    // temp_gain_v << 1, 1, 1, 0, 0, 0;
 
     for(int i=0; i<6; i++) {
       arm_rbdl.ts_p(i, i) = temp_gain_p(i);
@@ -1258,9 +1635,78 @@ namespace gazebo
     threshold << 0.2, 0.2, 0.2, 0.2, 0.2, 0.2; // limit threshold angle
     joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
                   -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
-    gain_r << 1, 0.3, 0.5, 0.5, 0.5, 0.5; // affects joint limit control
-    
-    // cnt_time = cnt * dt;   
+    // gain_r << 1, 0.3, 0.5, 0.5, 0.5, 0.5; // affects joint limit control
+    gain_r << 1, 1, 1, 1, 1, 1; // affects joint limit control
+
+        A0 << 1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1;
+    A1 << cos(th[0]), 0, -sin(th[0]), 0,
+          sin(th[0]), 0, cos(th[0]), 0,
+          0, -1, 0, L1,
+          0, 0, 0, 1;
+    A2 << cos(th[1]), -sin(th[1]), 0, L2*cos(th[1]),
+          sin(th[1]), cos(th[1]), 0, L2*sin(th[1]),
+          0, 0, 1, 0, 
+          0, 0, 0, 1;
+    A3 << cos(th[2]), -sin(th[2]), 0, L3*cos(th[2]), 
+          sin(th[2]), cos(th[2]), 0, L3*sin(th[2]), 
+          0, 0, 1, 0,
+          0, 0, 0, 1;
+    A4 << sin(th[3]), 0, cos(th[3]), 0,
+          -cos(th[3]), 0, sin(th[3]), 0,
+          0, -1, 0, 0,
+          0, 0, 0, 1;
+    A5 << -sin(th[4]), 0, cos(th[4]), 0,
+          cos(th[4]), 0, sin(th[4]), 0,
+          0, 1, 0, L5,
+          0, 0, 0, 1;
+    A6 << -sin(th[5]), -cos(th[5]), 0, -L6*sin(th[5]),
+          cos(th[5]), -sin(th[5]), 0, L6*cos(th[5]),
+          0, 0, 1, 0, 
+          0, 0, 0, 1;
+          
+    T00 = A0;
+    T01 = T00*A1;
+    T02 = T01*A2;
+    T03 = T02*A3;
+    T04 = T03*A4;
+    T05 = T04*A5;
+    T06 = T05*A6;
+  
+    a0 << T00(0,2), T00(1,2), T00(2,2);
+    a1 << T01(0,2), T01(1,2), T01(2,2);
+    a2 << T02(0,2), T02(1,2), T02(2,2);
+    a3 << T03(0,2), T03(1,2), T03(2,2);
+    a4 << T04(0,2), T04(1,2), T04(2,2);
+    a5 << T05(0,2), T05(1,2), T05(2,2);
+
+    P6_P0 << T06(0,3)-T00(0,3), T06(1,3)-T00(1,3), T06(2,3)-T00(2,3);
+    P6_P1 << T06(0,3)-T01(0,3), T06(1,3)-T01(1,3), T06(2,3)-T01(2,3);
+    P6_P2 << T06(0,3)-T02(0,3), T06(1,3)-T02(1,3), T06(2,3)-T02(2,3);
+    P6_P3 << T06(0,3)-T03(0,3), T06(1,3)-T03(1,3), T06(2,3)-T03(2,3);
+    P6_P4 << T06(0,3)-T04(0,3), T06(1,3)-T04(1,3), T06(2,3)-T04(2,3);
+    P6_P5 << T06(0,3)-T05(0,3), T06(1,3)-T05(1,3), T06(2,3)-T05(2,3);
+
+    J1 << a0.cross(P6_P0), a0;
+    J2 << a1.cross(P6_P1), a1;
+    J3 << a2.cross(P6_P2), a2;
+    J4 << a3.cross(P6_P3), a3;
+    J5 << a4.cross(P6_P4), a4;
+    J6 << a5.cross(P6_P5), a5;
+
+    Jacobian << J1, J2, J3, J4, J5, J6;
+
+    ee_position << T06(0,3), T06(1,3), T06(2,3);
+    ee_rotation = T06.block<3,3>(0,0);
+
+    double pi = 0, theta = 0, psi = 0;
+    pi = atan2(ee_rotation(1,0),ee_rotation(0,0));
+    theta = atan2(-ee_rotation(2,0), cos(pi)*ee_rotation(0,0) + sin(pi)*ee_rotation(1,0));
+    psi = atan2(sin(pi)*ee_rotation(0,2) - cos(pi)*ee_rotation(1,2), -sin(pi)*ee_rotation(0,1) + cos(pi)*ee_rotation(1,1));
+
+    arm_rbdl.x_actual << ee_position, psi, theta, pi;
 
     //for infinity Trajectory
     step_time = 3;
@@ -1270,9 +1716,9 @@ namespace gazebo
 
     if(cnt_time <= step_time*100)
     { 
-      ref_ee_position(0) = initial_ee_position(0) - 0.2*abs(sin(PI/2*(cnt_time/step_time)));
-      ref_ee_position(1) = initial_ee_position(1) - 0.3*sin(PI/2*(cnt_time/step_time));
-      ref_ee_position(2) = initial_ee_position(2) + 0.2*sin(PI*(cnt_time/step_time));
+      ref_ee_position(0) = initial_ee_position(0);// - 0.2*abs(sin(PI/2*(cnt_time/step_time)));
+      ref_ee_position(1) = initial_ee_position(1);// - 0.3*sin(PI/2*(cnt_time/step_time));
+      ref_ee_position(2) = initial_ee_position(2);// + 0.2*sin(PI*(cnt_time/step_time));
       ref_ee_quaternion.w() = 1;
       ref_ee_quaternion.x() = 0;
       ref_ee_quaternion.y() = 0;
@@ -1280,63 +1726,51 @@ namespace gazebo
     }
     ref_ee_rotation = ref_ee_quaternion.normalized().toRotationMatrix();
 
-    // ref_ee_position = hmd_position; // hmd의 position을 desired position으로 저장
-    // ref_ee_rotation = hmd_quaternion.normalized().toRotationMatrix(); //hmd quaternion을 rotation matrix로 변환 desired position으로 저장
-
     SetRBDLVariables();
 
-    arm_rbdl.jacobian_swap = RBDLMatrixNd::Zero(6,6);
-    RBDL::CalcPointJacobian6D(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), arm_rbdl.jacobian_swap, true);
-    arm_rbdl.position_ee = RBDL::CalcBodyToBaseCoordinates(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), false);
-    arm_rbdl.rotation_ee = RBDL::CalcBodyWorldOrientation(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, false);
-    arm_rbdl.rpy_ee = arm_rbdl.rotation_ee.eulerAngles(2, 1, 0); // "z -> y -> x" Rotation of Euler Angle representation
-    double pi = arm_rbdl.rpy_ee(0), theta = arm_rbdl.rpy_ee(1), psi = arm_rbdl.rpy_ee(2);
-
-    // arm_rbdl.rotation_ee_transpose = arm_rbdl.rotation_ee.transpose();
-    // double pi = 0, theta = 0, psi = 0;
-    // pi = atan2(arm_rbdl.rotation_ee_transpose(1,0),arm_rbdl.rotation_ee_transpose(0,0));
-    // theta = atan2(-arm_rbdl.rotation_ee_transpose(2,0), cos(pi)*arm_rbdl.rotation_ee_transpose(0,0) + sin(pi)*arm_rbdl.rotation_ee_transpose(1,0));
-    // psi = atan2(sin(pi)*arm_rbdl.rotation_ee_transpose(0,2) - cos(pi)*arm_rbdl.rotation_ee_transpose(1,2), -sin(pi)*arm_rbdl.rotation_ee_transpose(0,1) + cos(pi)*arm_rbdl.rotation_ee_transpose(1,1));
+    double pi_ref = 0, theta_ref = 0, psi_ref = 0;
+    pi_ref = atan2(ref_ee_rotation(1,0),ref_ee_rotation(0,0));
+    theta_ref = atan2(-ref_ee_rotation(2,0), cos(pi_ref)*ref_ee_rotation(0,0) + sin(pi_ref)*ref_ee_rotation(1,0));
+    psi_ref = atan2(sin(pi_ref)*ref_ee_rotation(0,2) - cos(pi_ref)*ref_ee_rotation(1,2), -sin(pi_ref)*ref_ee_rotation(0,1) + cos(pi_ref)*ref_ee_rotation(1,1));
     
-      // Change the Row
-    for(int j = 0; j < 6; j++)
-    {
-      for(int i = 0; i < 3; i++)
-      {
-       arm_rbdl.jacobian(i,j) = arm_rbdl.jacobian_swap(i+3,j);  // linear // 저장한게 방위,위치 순이어서 이를 위치, 방위순으로 재정렬
-      }
-      for(int i = 3; i < 6; i++)
-      {
-        arm_rbdl.jacobian(i,j) = arm_rbdl.jacobian_swap(i-3,j);  // angular
-      }
-    }
+    arm_rbdl.x_desired << ref_ee_position, psi_ref, theta_ref, pi_ref;
 
-    arm_rbdl.geometric_to_analytic << 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, cos(pi)/cos(theta), sin(pi)/cos(theta), 0, 0, 0, 0, -sin(pi), cos(pi), 0, 0, 0, 0, cos(pi)*tan(theta), sin(pi)*tan(theta), 1;
+    arm_rbdl.geometric_to_analytic << 1, 0, 0, 0, 0, 0,
+                                      0, 1, 0, 0, 0, 0, 
+                                      0, 0, 1, 0, 0, 0, 
+                                      0, 0, 0, cos(pi)/cos(theta), sin(pi)/cos(theta), 0, 
+                                      0, 0, 0, -sin(pi), cos(pi), 0, 
+                                      0, 0, 0, cos(pi)*tan(theta), sin(pi)*tan(theta), 1;
 
-    arm_rbdl.jacobian_ana = arm_rbdl.geometric_to_analytic * arm_rbdl.jacobian;
+    arm_rbdl.jacobian_ana = arm_rbdl.geometric_to_analytic * Jacobian;
 
     arm_rbdl.jacobian_ana_inverse = arm_rbdl.jacobian_ana.inverse();
 
-    arm_rbdl.rpy_desired = ref_ee_rotation.eulerAngles(2, 1, 0);
-    arm_rbdl.position_desired = ref_ee_position;
-    arm_rbdl.x_desired << arm_rbdl.position_desired, arm_rbdl.rpy_desired;
 
-    arm_rbdl.x_actual << arm_rbdl.position_ee, psi, theta, pi;
-    arm_rbdl.error = arm_rbdl.x_desired - arm_rbdl.x_actual;
-    arm_rbdl.virtual_spring = arm_rbdl.ts_p * arm_rbdl.error;
+ 
+    arm_rbdl.x_error = arm_rbdl.x_desired - arm_rbdl.x_actual;
+    arm_rbdl.virtual_spring = arm_rbdl.ts_p * arm_rbdl.x_error;
 
     arm_rbdl.x_desired_dot = (arm_rbdl.x_desired - arm_rbdl.x_desired_last) / dt;
     arm_rbdl.x_desired_last = arm_rbdl.x_desired;
+
     arm_rbdl.x_actual_dot = arm_rbdl.jacobian_ana * arm_rbdl.q_dot;
-    arm_rbdl.error_dot = arm_rbdl.x_desired_dot - arm_rbdl.x_actual_dot;
-    arm_rbdl.virtual_damping = arm_rbdl.ts_v * arm_rbdl.error_dot;
+    arm_rbdl.x_error_dot = arm_rbdl.x_desired_dot - arm_rbdl.x_actual_dot;
+    arm_rbdl.virtual_damping = arm_rbdl.ts_v * arm_rbdl.x_error_dot;
 
     arm_rbdl.x_desired_d_dot = (arm_rbdl.x_desired_dot - arm_rbdl.x_desired_dot_last) / dt;
     arm_rbdl.x_desired_dot_last = arm_rbdl.x_desired_dot;
 
     arm_rbdl.x_ctc_d_dot = arm_rbdl.virtual_spring + arm_rbdl.virtual_damping + arm_rbdl.x_desired_d_dot;
 
-    arm_rbdl.jacobian_ana_dot = (arm_rbdl.jacobian_ana - arm_rbdl.jacobian_ana_prev) / dt;
+    // arm_rbdl.jacobian_ana_dot = (arm_rbdl.jacobian_ana - arm_rbdl.jacobian_ana_prev) / dt;
+
+    for(int i = 0; i<6; i++)
+    {
+      for(int j = 0; j<6; j++){
+        arm_rbdl.jacobian_ana_dot(i,j) = (arm_rbdl.jacobian_ana(i,j)-arm_rbdl.jacobian_prev(i,j)) / dt;
+      }
+    }
     arm_rbdl.jacobian_prev = arm_rbdl.jacobian_ana;
     arm_rbdl.q_d_dot_ctc = arm_rbdl.jacobian_ana_inverse * (arm_rbdl.x_ctc_d_dot - arm_rbdl.jacobian_ana_dot * arm_rbdl.q_dot);
 
@@ -1364,6 +1798,132 @@ namespace gazebo
     cnt++;
   }
 
+  // PID control || No Gravity Compensation || Infinity Drawer
+  void STArmPlugin::Motion9()
+  {
+    step_time = 3;
+    
+    cnt_time = cnt*inner_dt;   
+
+    gain_p = gain_p_task_space;
+    gain_w = gain_w_task_space; 
+    gain_r << 1, 1, 1, 1, 1, 1; //adjust GC intensity
+
+
+    threshold << deg, deg, deg, deg, deg, deg;
+    joint_limit <<   (180/180)*PI,   (180/180)*PI,  (150/180)*PI,  1.57,  1.57,  1.57, 
+                    (-180/180)*PI,           -PI,  (90/180)*PI, -1.57, -1.57, -1.57;
+    // joint_limit <<   (180/180)*PI,   (35/180)*PI,  (164.8/180)*PI,  1.57,  1.57,  1.57, 
+    //                 (-135/180)*PI,           -PI,      (5/180)*PI, -1.57, -1.57, -1.57;
+    // threshold << 0.2, 0.1, 0.1, 0.1, 0.1, 0.1; 
+    // joint_limit << 3.14,     0,  2.8,  1.87,  1.57,  1.57,
+    //                 -3.14, -3.14, -0.3, -1.27, -1.57, -1.57;
+
+    A0 << 1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1;
+    A1 << cos(th[0]), 0, -sin(th[0]), 0,
+          sin(th[0]), 0, cos(th[0]), 0,
+          0, -1, 0, L1,
+          0, 0, 0, 1;
+    A2 << cos(th[1]), -sin(th[1]), 0, L2*cos(th[1]),
+          sin(th[1]), cos(th[1]), 0, L2*sin(th[1]),
+          0, 0, 1, 0, 
+          0, 0, 0, 1;
+    A3 << cos(th[2]), -sin(th[2]), 0, L3*cos(th[2]), 
+          sin(th[2]), cos(th[2]), 0, L3*sin(th[2]), 
+          0, 0, 1, 0,
+          0, 0, 0, 1;
+    A4 << sin(th[3]), 0, cos(th[3]), 0,
+          -cos(th[3]), 0, sin(th[3]), 0,
+          0, -1, 0, 0,
+          0, 0, 0, 1;
+    A5 << -sin(th[4]), 0, cos(th[4]), 0,
+          cos(th[4]), 0, sin(th[4]), 0,
+          0, 1, 0, L5,
+          0, 0, 0, 1;
+    A6 << -sin(th[5]), -cos(th[5]), 0, -L6*sin(th[5]),
+          cos(th[5]), -sin(th[5]), 0, L6*cos(th[5]),
+          0, 0, 1, 0, 
+          0, 0, 0, 1;
+          
+    T00 = A0;
+    T01 = T00*A1;
+    T02 = T01*A2;
+    T03 = T02*A3;
+    T04 = T03*A4;
+    T05 = T04*A5;
+    T06 = T05*A6;
+  
+    a0 << T00(0,2), T00(1,2), T00(2,2);
+    a1 << T01(0,2), T01(1,2), T01(2,2);
+    a2 << T02(0,2), T02(1,2), T02(2,2);
+    a3 << T03(0,2), T03(1,2), T03(2,2);
+    a4 << T04(0,2), T04(1,2), T04(2,2);
+    a5 << T05(0,2), T05(1,2), T05(2,2);
+
+    P6_P0 << T06(0,3)-T00(0,3), T06(1,3)-T00(1,3), T06(2,3)-T00(2,3);
+    P6_P1 << T06(0,3)-T01(0,3), T06(1,3)-T01(1,3), T06(2,3)-T01(2,3);
+    P6_P2 << T06(0,3)-T02(0,3), T06(1,3)-T02(1,3), T06(2,3)-T02(2,3);
+    P6_P3 << T06(0,3)-T03(0,3), T06(1,3)-T03(1,3), T06(2,3)-T03(2,3);
+    P6_P4 << T06(0,3)-T04(0,3), T06(1,3)-T04(1,3), T06(2,3)-T04(2,3);
+    P6_P5 << T06(0,3)-T05(0,3), T06(1,3)-T05(1,3), T06(2,3)-T05(2,3);
+
+    J1 << a0.cross(P6_P0), a0;
+    J2 << a1.cross(P6_P1), a1;
+    J3 << a2.cross(P6_P2), a2;
+    J4 << a3.cross(P6_P3), a3;
+    J5 << a4.cross(P6_P4), a4;
+    J6 << a5.cross(P6_P5), a5;
+
+    Jacobian << J1, J2, J3, J4, J5, J6;
+
+    ee_position << T06(0,3), T06(1,3), T06(2,3);
+    
+    // if (cnt<1) initial_ee_position << ee_position(0), ee_position(1), ee_position(2);
+    if (cnt<1) initial_ee_position << 0.4, 0, 0.3;
+
+    if(cnt_time <= step_time*100)
+    { 
+      ref_ee_position(0) = initial_ee_position(0) - 0.2*abs(sin(PI/2*(cnt_time/step_time)));
+      ref_ee_position(1) = initial_ee_position(1) - 0.3*sin(PI/2*(cnt_time/step_time));
+      ref_ee_position(2) = initial_ee_position(2) + 0.2*sin(PI*(cnt_time/step_time));
+      ref_ee_quaternion.w() = 1;
+      ref_ee_quaternion.x() = 0;
+      ref_ee_quaternion.y() = 0;
+      ref_ee_quaternion.z() = 0;
+    }
+
+    ee_force(0) = gain_p(0) * (ref_ee_position(0) - ee_position(0));
+    ee_force(1) = gain_p(1) * (ref_ee_position(1) - ee_position(1));
+    ee_force(2) = gain_p(2) * (ref_ee_position(2) - ee_position(2));
+
+    ee_rotation = T06.block<3,3>(0,0);
+    ee_rotation_x = ee_rotation.block<3,1>(0,0); 
+    ee_rotation_y = ee_rotation.block<3,1>(0,1); 
+    ee_rotation_z = ee_rotation.block<3,1>(0,2);
+
+    //for MSG Publisher
+    arm_rbdl.rpy_ee = ee_rotation.eulerAngles(2,1,0);
+
+    ref_ee_rotation = ref_ee_quaternion.normalized().toRotationMatrix();    
+
+    ref_ee_rotation_x = ref_ee_rotation.block<3,1>(0,0); 
+    ref_ee_rotation_y = ref_ee_rotation.block<3,1>(0,1); 
+    ref_ee_rotation_z = ref_ee_rotation.block<3,1>(0,2);
+    ee_orientation_error = ee_rotation_x.cross(ref_ee_rotation_x) + ee_rotation_y.cross(ref_ee_rotation_y) + ee_rotation_z.cross(ref_ee_rotation_z);
+    ee_momentum << gain_w(0) * ee_orientation_error(0), gain_w(1) * ee_orientation_error(1), gain_w(2) * ee_orientation_error(2);
+
+    virtual_spring << ee_force(0), ee_force(1), ee_force(2), ee_momentum(0), ee_momentum(1), ee_momentum(2);
+
+    tau_vs = Jacobian.transpose() * virtual_spring;
+    
+    for(uint8_t i=0; i<6; i++)
+    {
+        joint_torque(i) = tau_vs(i);
+    }
+  }
 
   void STArmPlugin::HMDPoseCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
   {
@@ -2086,179 +2646,85 @@ namespace gazebo
   }
 
 
+  void STArmPlugin::Calc_Feedback_Pose(Arm_RBDL &rbdl)
+  {
 
-  // // a argument   // m member    // l local   //p pointer     //r reference   //
-  // void STArmPlugin::GetJacobians(VectorXd a_th, MatrixXd a_Jacobian, Vector3d a_current_position, Matrix3d a_current_orientation)
-  // {
-  //   Matrix4d l_HT0, l_HT1, l_HT2, l_HT3, l_HT4, l_HT5, l_HT6;
-  //   Matrix4d l_T00, l_T01, l_T02, l_T03, l_T04, l_T05, l_T06;
-  //   Vector3d l_a0, l_a1, l_a2, l_a3, l_a4, l_a5;
-  //   Vector3d l_P6_P0, l_P6_P1, l_P6_P2, l_P6_P3, l_P6_P4, l_P6_P5;
-  //   VectorXd l_J1(6), l_J2(6), l_J3(6), l_J4(6), l_J5(6), l_J6(6); 
-  //   l_HT0 << 1, 0, 0, 0,
-  //         0, 1, 0, 0,
-  //         0, 0, 1, 0,
-  //         0, 0, 0, 1;
-  //   l_HT1 << cosf(a_th[0]), 0, -sinf(a_th[0]), 0,
-  //         sinf(a_th[0]), 0, cosf(a_th[0]), 0,
-  //         0, -1, 0, L1,
-  //         0, 0, 0, 1;
-  //   l_HT2 << cosf(a_th[1]), -sinf(a_th[1]), 0, L2*cosf(a_th[1]),
-  //         sinf(a_th[1]), cosf(a_th[1]), 0, L2*sinf(a_th[1]),
-  //         0, 0, 1, 0, 
-  //         0, 0, 0, 1;
-  //   l_HT3 << cosf(a_th[2]), -sinf(a_th[2]), 0, L3*cosf(a_th[2]), 
-  //         sinf(a_th[2]), cosf(a_th[2]), 0, L3*sinf(a_th[2]), 
-  //         0, 0, 1, 0,
-  //         0, 0, 0, 1;
-  //   l_HT4 << sinf(a_th[3]), 0, cosf(a_th[3]), 0,
-  //         -cosf(a_th[3]), 0, sinf(a_th[3]), 0,
-  //         0, -1, 0, 0,
-  //         0, 0, 0, 1;
-  //   l_HT5 << -sinf(a_th[4]), 0, cosf(a_th[4]), 0,
-  //         cosf(a_th[4]), 0, sinf(a_th[4]), 0,
-  //         0, 1, 0, L5,
-  //         0, 0, 0, 1;
-  //   l_HT6 << -sinf(a_th[5]), -cosf(a_th[5]), 0, -L6*sinf(a_th[5]),
-  //         cosf(a_th[5]), -sinf(a_th[5]), 0, L6*cosf(a_th[5]),
-  //         0, 0, 1, 0, 
-  //         0, 0, 0, 1;
-  //   l_T00 = l_HT0;
-  //   l_T01 = l_T00 * l_HT1;
-  //   l_T02 = l_T01 * l_HT2;
-  //   l_T03 = l_T02 * l_HT3;
-  //   l_T04 = l_T03 * l_HT4;
-  //   l_T05 = l_T04 * l_HT5;
-  //   l_T06 = l_T05 * l_HT6;
-  //   l_a0 << l_T00(0,2), l_T00(1,2), l_T00(2,2);
-  //   l_a1 << l_T01(0,2), l_T01(1,2), l_T01(2,2);
-  //   l_a2 << l_T02(0,2), l_T02(1,2), l_T02(2,2);
-  //   l_a3 << l_T03(0,2), l_T03(1,2), l_T03(2,2);
-  //   l_a4 << l_T04(0,2), l_T04(1,2), l_T04(2,2);
-  //   l_a5 << l_T05(0,2), l_T05(1,2), l_T05(2,2);
-  //   l_P6_P0 << l_T06(0,3) - l_T00(0,3), l_T06(1,3) - l_T00(1,3), l_T06(2,3) - l_T00(2,3);
-  //   l_P6_P1 << l_T06(0,3) - l_T01(0,3), l_T06(1,3) - l_T01(1,3), l_T06(2,3) - l_T01(2,3);
-  //   l_P6_P2 << l_T06(0,3) - l_T02(0,3), l_T06(1,3) - l_T02(1,3), l_T06(2,3) - l_T02(2,3);
-  //   l_P6_P3 << l_T06(0,3) - l_T03(0,3), l_T06(1,3) - l_T03(1,3), l_T06(2,3) - l_T03(2,3);
-  //   l_P6_P4 << l_T06(0,3) - l_T04(0,3), l_T06(1,3) - l_T04(1,3), l_T06(2,3) - l_T04(2,3);
-  //   l_P6_P5 << l_T06(0,3) - l_T05(0,3), l_T06(1,3) - l_T05(1,3), l_T06(2,3) - l_T05(2,3);
-  //   l_J1 << l_a0.cross(l_P6_P0), l_a0;
-  //   l_J2 << l_a1.cross(l_P6_P1), l_a1;
-  //   l_J3 << l_a2.cross(l_P6_P2), l_a2;
-  //   l_J4 << l_a3.cross(l_P6_P3), l_a3;
-  //   l_J5 << l_a4.cross(l_P6_P4), l_a4;
-  //   l_J6 << l_a5.cross(l_P6_P5), l_a5;
-  //   a_Jacobian << l_J1, l_J2, l_J3, l_J4, l_J5, l_J6;
-  //   // a_Current_Pose = l_T06;
-  //   a_current_position << l_T06(0,3), l_T06(1,3), l_T06(2,3);
-  //   a_current_orientation = l_T06.block<3,3>(0,0);
-  //   ik_current_pose << a_current_position(0), a_current_position(1), a_current_position(2), a_th(0), a_th(1), a_th(2);
-  // }
-  // MatrixXd STArmPlugin::jacobian()
-  // {
-  //   MatrixXd jacobian = MatrixXd::Identity(6, 6);
-  //   Vector3d joint_axis = Vector3d::Zero(3);
-  //   Vector3d position_changed = Vector3d::Zero(3);
-  //   Vector3d orientation_changed = Vector3d::Zero(3);
-  //   VectorXd pose_changed = VectorXd::Zero(6);
-  //   //////////////////////////////////////////////////////////////////////////////////
-  //   int8_t index = 0;
-  //   Name my_name =  manipulator->getWorldChildName();
-  //   for (int8_t size = 0; size < 6; size++)
-  //   {
-  //     position_changed = skewSymmetricMatrix(joint_axis) *
-  //                       (manipulator->getComponentPositionFromWorld(tool_name) - manipulator->getComponentPositionFromWorld(my_name));
-  //     orientation_changed = joint_axis;
-  //     pose_changed << position_changed(0),
-  //         position_changed(1),
-  //         position_changed(2),
-  //         orientation_changed(0),
-  //         orientation_changed(1),
-  //         orientation_changed(2);
-  //     jacobian.col(index) = pose_changed;
-  //     index++;
-  //     my_name = manipulator->getComponentChildName(my_name).at(0); // Get Child name which has active joint
-  //   }
-  //   return jacobian;
-  // }
-  // /// <summary>
-  // // Takes the current q vector as an input and 
-  // //  returns the geometric Position Jacobian J_P, the geometric Rotation Jacobian J_R, 
-  // //  the current task-space position r_IE and the current task-space end-effector rotatoin matrix
-  // /// </summary>
-  // void GetJacobians(float[] q, out Matrix J_P, out Matrix J_R, out Vector I_r_IE_current, out RotationMatrix Rot_M_EE)
-  // {
-  //     List<Matrix4x4> T_I_k = GetFK(q);
-  //     List<RotationMatrix> Rotation_Ms = new List<RotationMatrix>();
-  //     List<Vector> position_Vs = new List<Vector>();
-  //     foreach (var T in T_I_k)
-  //     {
-  //         Rotation_Ms.Add(T.GetRotation());
-  //         position_Vs.Add(new Vector(T[0, 3], T[1, 3], T[2, 3]));
-  //     }
-  //     Matrix4x4 HT_EE = T_I_k.Last();
-  //     Rot_M_EE = HT_EE.GetRotation();
-  //     Vector pos_V_EE = new Vector(HT_EE[0, 3], HT_EE[1, 3], HT_EE[2, 3]);
-  //     List<double[]> j = new List<double[]>();
-  //     for (int i = 0; i < 6; i++)
-  //     {
-  //         j.Add(Vector.Cross(Rotation_Ms[i] * vectorZ, pos_V_EE - position_Vs[i]).ToArray());                
-  //     }
-  //     J_P = new Matrix(j.ToArray());
-  //     j = new List<double[]>();
-  //     for (int i = 0; i < 6; i++)
-  //     {
-  //         j.Add((Rotation_Ms[i] * vectorZ).ToArray());
-  //     }
-  //     J_R = new Matrix(j.ToArray());
-  //     I_r_IE_current = pos_V_EE;
-  // }
-  // VectorXd STArmPlugin::SolveForwardKinematics(VectorXd a_th)
-  // {
-  //   MatrixXd HT0, HT1, HT2, HT3, HT4, HT5, HT6;
-  //   MatrixXd a_T00, a_T01, a_T02, a_T03, a_T04, a_T05, a_T06;
-  //   VectorXd a_ee_pose;
-  //   HT0 << 1, 0, 0, 0,
-  //         0, 1, 0, 0,
-  //         0, 0, 1, 0,
-  //         0, 0, 0, 1;
-  //   HT1 << cos(a_th[0]), 0, -sin(a_th[0]), 0,
-  //         sin(a_th[0]), 0, cos(a_th[0]), 0,
-  //         0, -1, 0, L1,
-  //         0, 0, 0, 1;
-  //   HT2 << cos(a_th[1]), -sin(a_th[1]), 0, L2*cos(a_th[1]),
-  //         sin(a_th[1]), cos(a_th[1]), 0, L2*sin(a_th[1]),
-  //         0, 0, 1, 0, 
-  //         0, 0, 0, 1;
-  //   HT3 << cos(a_th[2]), -sin(a_th[2]), 0, L3*cos(a_th[2]), 
-  //         sin(a_th[2]), cos(a_th[2]), 0, L3*sin(a_th[2]), 
-  //         0, 0, 1, 0,
-  //         0, 0, 0, 1;
-  //   HT4 << sin(a_th[3]), 0, cos(a_th[3]), 0,
-  //         -cos(a_th[3]), 0, sin(a_th[3]), 0,
-  //         0, -1, 0, 0,
-  //         0, 0, 0, 1;
-  //   HT5 << -sin(a_th[4]), 0, cos(a_th[4]), 0,
-  //         cos(a_th[4]), 0, sin(a_th[4]), 0,
-  //         0, 1, 0, L5,
-  //         0, 0, 0, 1;
-  //   HT6 << -sin(a_th[5]), -cos(a_th[5]), 0, -L6*sin(a_th[5]),
-  //         cos(a_th[5]), -sin(a_th[5]), 0, L6*cos(a_th[5]),
-  //         0, 0, 1, 0, 
-  //         0, 0, 0, 1;
-  //   a_T00 = HT0;
-  //   a_T01 = a_T00*HT1;
-  //   a_T02 = a_T01*HT2;
-  //   a_T03 = a_T02*HT3;
-  //   a_T04 = a_T03*HT4;
-  //   a_T05 = a_T04*HT5;
-  //   a_T06 = a_T05*HT6;
-  //   a_ee_pose << a_T06(0,3), a_T06(1,3), a_T06(2,3), 0, 0, 0;
-  //   return a_ee_pose;
-  //   // ee_rotation = a_T06.block<3,3>(0,0);
-  // }
-  // void STArmPlugin::SolveInverseKinematics()
-  // {
-  // }
+    double pi = 0, theta = 0, psi = 0;
+    arm_rbdl.jacobian_swap = RBDLMatrixNd::Zero(6,6);
 
+    //Get the EE Pose
+    arm_rbdl.ee_pos_act = RBDL::CalcBodyToBaseCoordinates(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), true);  //Position 
+    arm_rbdl.ee_ori_act = RBDL::CalcBodyWorldOrientation(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, true);  //Orientation
+
+    ee_position = arm_rbdl.ee_pos_act;
+
+    arm_rbdl.ee_ori_act_trans = arm_rbdl.ee_ori_act;//.transpose();
+
+
+    // //z - y - z
+    // arm_rbdl.rpy_ee = arm_rbdl.ee_ori_act_trans.eulerAngles(2, 1, 2);
+    // pi = arm_rbdl.rpy_ee(0);
+    // theta = arm_rbdl.rpy_ee(1);
+    // psi = arm_rbdl.rpy_ee(2);
+
+    // Get the Euler Angle z-y-x rotation matrix
+    pi = atan2(arm_rbdl.ee_ori_act_trans(1,0),arm_rbdl.ee_ori_act_trans(0,0));
+    theta = atan2(- arm_rbdl.ee_ori_act_trans(2,0), cos(pi)*arm_rbdl.ee_ori_act_trans(0,0) + sin(pi)*arm_rbdl.ee_ori_act_trans(1,0));
+    psi = atan2(sin(pi)*arm_rbdl.ee_ori_act_trans(0,2) - cos(pi)*arm_rbdl.ee_ori_act_trans(1,2), -sin(pi)*arm_rbdl.ee_ori_act_trans(0,1) + cos(pi)*arm_rbdl.ee_ori_act_trans(1,1));
+
+    // Get the Geometric Jacobian
+    RBDL::CalcPointJacobian6D(*arm_rbdl.rbdl_model, arm_rbdl.q, arm_rbdl.gripper_id, RBDLVector3d(0,0,0), arm_rbdl.jacobian_swap, true);
+
+    // Change the Row
+    for(int j = 0; j < 6; j++)
+    {
+      for(int i = 0; i < 3; i++)
+      {
+       arm_rbdl.jacobian(i,j) = arm_rbdl.jacobian_swap(i+3,j);  // linear // 저장한게 방위,위치 순이어서 이를 위치, 방위순으로 재정렬
+      }
+      for(int i = 3; i < 6; i++)
+      {
+        arm_rbdl.jacobian(i,j) = arm_rbdl.jacobian_swap(i-3,j);  // angular
+      }
+    }
+
+    // // Calculate the Analytical Jacobian & Inverse of Analytical Jacobian z-y-z
+    // arm_rbdl.geometric_to_analytic << 1, 0, 0, 0, 0, 0,
+    //                                   0, 1, 0, 0, 0, 0,
+    //                                   0, 0, 1, 0, 0, 0,
+    //                                   0, 0, 0, cos(psi) / sin(theta), sin(psi) / sin(theta), 0,
+    //                                   0, 0, 0, -sin(psi), cos(psi), 0,
+    //                                   0, 0, 0, -cos(psi) * tan(theta), -sin(psi) * tan(theta), 1;
+
+    // Calculate the Analytical Jacobian & Inverse of Analytical Jacobian z-y-x
+    arm_rbdl.geometric_to_analytic << 1, 0, 0, 0, 0, 0,
+                                      0, 1, 0, 0, 0, 0,
+                                      0, 0, 1, 0, 0, 0,
+                                      0, 0, 0, cos(pi) / cos(theta), sin(pi) / cos(theta), 0,
+                                      0, 0, 0, -sin(pi), cos(pi), 0,
+                                      0, 0, 0, cos(pi) * tan(theta), sin(pi) * tan(theta), 1;
+
+    // Analytical Jacobin
+    arm_rbdl.jacobian_ana = arm_rbdl.geometric_to_analytic * arm_rbdl.jacobian;
+
+    // Inverse of Analytical Jacobian
+    arm_rbdl.jacobian_ana_inverse = arm_rbdl.jacobian_ana.inverse();
+
+    for(int i = 0; i<6; i++)
+    {
+      for(int j = 0; j<6; j++){
+        arm_rbdl.jacobian_ana_dot(i,j) = (arm_rbdl.jacobian_ana(i,j)-arm_rbdl.jacobian_prev(i,j)) / dt;
+        arm_rbdl.jacobian_prev(i,j) = arm_rbdl.jacobian_ana(i,j);
+      }
+    }
+
+    // Storing Actual EE Pose
+    arm_rbdl.x_actual << arm_rbdl.ee_pos_act, psi, theta, pi;
+
+    // Calculate Actual EE Velocity
+    arm_rbdl.x_actual_dot = arm_rbdl.jacobian_ana * arm_rbdl.q_dot;
+
+  }
 }
+
+

@@ -42,7 +42,7 @@ using RBDLJoint = RBDL::Joint;
 
 #define deg2rad		0.017453292519943
 #define rad2deg		57.295779513082323
-#define g           9.81;       
+#define g           9.81   
 #define PI          3.1415
 
 // #define L1 0.16
@@ -53,21 +53,30 @@ using RBDLJoint = RBDL::Joint;
 #define L5 0.1045
 #define L6 0.07
 
-#define m_Link1 0.54529
-#define m_Link2 0.66888
-#define m_Link3 0.18375
-#define m_Link4 0.09437
-#define m_Link5 0.08317
-#define m_Link6 0.35126
+//for caluculationg COM of st_arm_v3 
+#define joint0_to_L1_com 0.09579
+#define joint1_to_L2_com 0.21653
+#define joint2_to_L3_com 0.16062
+#define joint3_to_L4_com 0.04238
+#define joint4_to_L5_com 0.02707
+#define joint5_to_L6_com 0.06938
 
-#define m_Arm 1.92672 // (m_Link1~6 합친거)
-#define M1 1.92672 // m_Arm
-#define M2 1.38143 //m_Link2+m_Link3+m_Link4+m_Link5+m_Link6;
-#define M3 0.71255 //m_Link3+m_Link4+m_Link5+m_Link6;
-#define M4 0.52880 //m_Link4+m_Link5+m_Link6;
-#define M5 0.43443 //m_Link5+m_Link6;
-#define M6 0.35126 //m_Link6;
-#define inner_dt 0.002
+// st_arm_v3 mass
+#define m_Link1 0.54333
+#define m_Link2 0.67378
+#define m_Link3 0.19195
+#define m_Link4 0.083173
+#define m_Link5 0.083173
+#define m_Link6 0.35586
+
+#define m_Arm 1.931266 // (m_Link1~6 합친거)
+#define M1 1.931266 // m_Arm
+#define M2 1.38793 //m_Link2+m_Link3+m_Link4+m_Link5+m_Link6;
+#define M3 0.71415 //m_Link3+m_Link4+m_Link5+m_Link6;
+#define M4 0.52220 //m_Link4+m_Link5+m_Link6;
+#define M5 0.43903 //m_Link5+m_Link6;
+#define M6 0.35586 //m_Link6;
+#define inner_dt 0.001
 
 typedef struct
 {
@@ -97,6 +106,7 @@ namespace Dynamics
 
         double cnt_time = 0;
         unsigned int cnt = 0;   
+        double deg1 = (1/180)*PI;
 
         Vector3d ee_rotation_x, ee_rotation_y, ee_rotation_z, ref_ee_rotation_x, ref_ee_rotation_y, ref_ee_rotation_z;
         Vector3d ee_orientation_error, ee_force, ee_momentum;
